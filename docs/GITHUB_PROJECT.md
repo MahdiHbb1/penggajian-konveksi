@@ -23,9 +23,10 @@ Dokumen ini menjelaskan cara memindahkan repo ke GitHub, mengatur GitHub Project
 | Issue | [#1](https://github.com/MahdiHbb1/penggajian-konveksi/issues/1) sampai [#6](https://github.com/MahdiHbb1/penggajian-konveksi/issues/6) |
 | Label | `modul-1` sampai `modul-6`, `implementasi`, `tes`, `dokumen` |
 | Field Project | `Modul`, `PIC`, `Branch` |
+| Proteksi `main` | aktif: wajib pull request dan 1 approval |
 | Kolaborator | belum ada, menunggu username GitHub anggota |
 
-Semua issue sudah masuk Project dengan Status `Todo` dan field `Modul`, `PIC`, serta `Branch` terisi. Yang belum: undangan kolaborator, assign issue ke akun GitHub, view Project, dan proteksi `main`.
+Semua issue sudah masuk Project dengan Status `Todo` dan field `Modul`, `PIC`, serta `Branch` terisi. Yang belum: undangan kolaborator, assign issue ke akun GitHub, dan view Project.
 
 ## 2. Membuat repo dan push pertama
 
@@ -107,7 +108,7 @@ gh project field-create 2 --owner @me --name "PIC" --data-type TEXT
 gh project field-create 2 --owner @me --name "Branch" --data-type TEXT
 ```
 
-Buat view berikut lewat tombol **New view**:
+Saat ini Project baru punya **View 1** bertipe table. GitHub CLI belum menyediakan perintah untuk membuat view, jadi empat view berikut dibuat manual lewat tombol **New view** di web:
 
 | Nama view | Tipe | Isi |
 |---|---|---|
@@ -244,7 +245,9 @@ Setelah PR sub-branch di-merge, hapus sub-branch dan lanjutkan dari `modul-1-pek
 
 ## 7. Melindungi `main`
 
-Lewat web: **Settings > Branches > Add branch protection rule**.
+Proteksi `main` sudah aktif: pull request wajib, minimal 1 approval, force push dan hapus branch diblokir, dan aturan berlaku juga untuk admin.
+
+Untuk memeriksa atau mengubahnya lewat web: **Settings > Branches > Add branch protection rule**.
 
 - Branch name pattern: `main`
 - Centang **Require a pull request before merging**
@@ -255,6 +258,8 @@ Lewat web: **Settings > Branches > Add branch protection rule**.
 - Centang **Do not allow bypassing the above settings**
 
 Jika nanti ada GitHub Actions, tambahkan nama check-nya, misalnya `build` dan `test`.
+
+Karena approval tidak boleh dari penulis PR sendiri, pastikan minimal dua anggota sudah menerima undangan sebelum alur PR dipakai. Sementara waktu, pemilik repo bisa mematikan proteksi lewat **Settings > Branches** jika benar-benar perlu push langsung.
 
 ## 8. Memperbarui progres
 

@@ -73,6 +73,8 @@ scripts/                 pembuat label dan issue GitHub
 
 ## Tracking dan GitHub
 
+- Repo: <https://github.com/MahdiHbb1/penggajian-konveksi> (privat).
+- Project: <https://github.com/users/MahdiHbb1/projects/2>.
 - Panduan repo, kolaborator, dan GitHub Projects: `docs/GITHUB_PROJECT.md`.
 - Rekap progres untuk laporan: `docs/PROGRES.md`.
 - Pembuat label dan issue: `scripts/siapkan-github.ps1`.
