@@ -4,14 +4,32 @@ Dokumen ini menjelaskan cara memindahkan repo ke GitHub, mengatur GitHub Project
 
 ## 1. Ringkasan keputusan
 
+- Repo: <https://github.com/MahdiHbb1/penggajian-konveksi> (privat).
+- Project: <https://github.com/users/MahdiHbb1/projects/2>.
 - `main` adalah cabang utama yang selalu bisa di-build.
 - Setiap anggota bekerja di cabang modulnya sendiri.
 - Perubahan masuk ke `main` lewat pull request, bukan push langsung.
 - Satu issue per modul, dilacak di GitHub Projects.
-- Status issue: `Backlog`, `Ready`, `In progress`, `In review`, `Done`.
+- Status issue: `Todo`, `In Progress`, `Done`.
 - Branch modul tidak dihapus sampai proyek selesai.
 
+### 1.1 Kondisi repo saat ini
+
+| Hal | Nilai |
+|---|---|
+| Repo | <https://github.com/MahdiHbb1/penggajian-konveksi> (privat) |
+| Branch | `main` plus enam branch modul |
+| Project | <https://github.com/users/MahdiHbb1/projects/2> |
+| Issue | [#1](https://github.com/MahdiHbb1/penggajian-konveksi/issues/1) sampai [#6](https://github.com/MahdiHbb1/penggajian-konveksi/issues/6) |
+| Label | `modul-1` sampai `modul-6`, `implementasi`, `tes`, `dokumen` |
+| Field Project | `Modul`, `PIC`, `Branch` |
+| Kolaborator | belum ada, menunggu username GitHub anggota |
+
+Semua issue sudah masuk Project dengan Status `Todo` dan field `Modul`, `PIC`, serta `Branch` terisi. Yang belum: undangan kolaborator, assign issue ke akun GitHub, view Project, dan proteksi `main`.
+
 ## 2. Membuat repo dan push pertama
+
+Bagian ini hanya untuk membuat repo dari nol. Repo saat ini sudah ada, jadi lewati ke bagian 3.
 
 Pastikan `gh` sudah terpasang dan login.
 
@@ -63,24 +81,30 @@ gh api --method PUT repos/OWNER/REPO/collaborators/USERNAME -f permission=push
 
 Setiap anggota harus menerima undangan sebelum bisa push.
 
-## 4. Membuat GitHub Project
+## 4. GitHub Project
 
-Project adalah papan tingkat akun atau organisasi, bukan milik satu repo. Buat satu project untuk seluruh mata kuliah ini.
+Project adalah papan tingkat akun atau organisasi, bukan milik satu repo. Project yang dipakai: **Penggajian Konveksi** nomor `2`, sudah ditautkan ke repo.
 
 ```powershell
 gh auth refresh -s project
-gh project create --owner @me --title "Penggajian Konveksi"
 gh project list --owner @me
+gh project view 2 --owner @me --web
 ```
 
-Catat nomor project dari output. Contoh nomor `1`.
-
-Tambahkan field agar progres per anggota terlihat:
+Jika suatu saat perlu membuat project baru:
 
 ```powershell
-gh project field-create 1 --owner @me --name "Modul" --data-type SINGLE_SELECT --single-select-options "1 Pekerja,2 Jadwal dan Kasbon,3 Absensi,4 Penggajian,5 Periode dan Koreksi,6 Laporan dan Antarmuka"
-gh project field-create 1 --owner @me --name "PIC" --data-type TEXT
-gh project field-create 1 --owner @me --name "Branch" --data-type TEXT
+gh project create --owner @me --title "Penggajian Konveksi"
+```
+
+Catat nomor project dari output.
+
+Field yang sudah dibuat di Project #2:
+
+```powershell
+gh project field-create 2 --owner @me --name "Modul" --data-type SINGLE_SELECT --single-select-options "1 Pekerja,2 Jadwal dan Kasbon,3 Absensi,4 Penggajian,5 Periode dan Koreksi,6 Laporan dan Antarmuka"
+gh project field-create 2 --owner @me --name "PIC" --data-type TEXT
+gh project field-create 2 --owner @me --name "Branch" --data-type TEXT
 ```
 
 Buat view berikut lewat tombol **New view**:
@@ -100,6 +124,8 @@ Aktifkan automasi di **Project > Workflows**:
 
 ## 5. Membuat label dan issue
 
+Label dan enam issue sudah dibuat di repo ini, jadi bagian ini hanya untuk mengulang atau menambah modul baru.
+
 Isi username GitHub anggota terlebih dahulu:
 
 ```powershell
@@ -110,15 +136,17 @@ notepad docs/github-anggota.json
 Jalankan script dari root repo:
 
 ```powershell
-.\scripts\siapkan-github.ps1 -ProjectNumber 1
+.\scripts\siapkan-github.ps1 -ProjectNumber 2
 ```
 
 Script akan:
 
 - membuat label `modul-1` sampai `modul-6`, `implementasi`, `tes`, dan `dokumen`;
-- membuat enam issue dari `docs/issues/`;
+- membuat enam issue dari `docs/issues/` jika judulnya belum ada;
 - menambahkan setiap issue ke project;
 - meng-assign issue jika username di `docs/github-anggota.json` sudah diisi.
+
+Script aman dijalankan ulang untuk label dan issue karena judul yang sudah ada akan dilewati. Setelah semua issue pernah ditambahkan, jangan jalankan ulang bagian project tanpa memeriksa daftar item agar tidak ada duplikat.
 
 Jika belum ingin memakai script, buat issue manual dari template **Tugas Modul**, lalu tempel isi file `docs/issues/modul-X.md`.
 
@@ -127,7 +155,7 @@ Jika belum ingin memakai script, buat issue manual dari template **Tugas Modul**
 ### 6.1 Persiapan sekali di komputer masing-masing
 
 ```powershell
-git clone https://github.com/OWNER/penggajian-konveksi.git
+git clone https://github.com/MahdiHbb1/penggajian-konveksi.git
 cd penggajian-konveksi
 git config user.name "Nama Lengkap"
 git config user.email "email@contoh.com"
@@ -232,15 +260,15 @@ Jika nanti ada GitHub Actions, tambahkan nama check-nya, misalnya `build` dan `t
 
 Setiap anggota memperbarui issue, bukan hanya mengirim chat.
 
-- Pindahkan kartu ke `In progress` saat mulai.
-- Pindahkan ke `In review` saat PR dibuka.
+- Pindahkan kartu ke `In Progress` saat mulai.
+- Saat PR dibuka, tetap `In Progress` dan tautkan PR ke issue lewat **Linked pull requests**. Review terlihat dari status PR, bukan dari Status issue.
 - Pindahkan ke `Done` saat PR di-merge dan tes lulus.
 - Tulis komentar singkat di issue setiap akhir pekan: apa yang selesai, tes apa yang lulus, apa yang menghambat.
 
 Contoh komentar:
 
 ```text
-Status: In progress
+Status: In Progress
 Selesai: CRUD pekerja dan validasi kode unik
 Tes: go test ./internal/pekerja lulus
 Berikutnya: form riwayat upah

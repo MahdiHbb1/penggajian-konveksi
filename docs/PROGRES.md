@@ -4,26 +4,31 @@ Rekap ini untuk laporan kampus. Sumber kebenaran harian tetap GitHub Projects.
 
 Terakhir diperbarui: 1 November 2026
 
+Repo: <https://github.com/MahdiHbb1/penggajian-konveksi> (privat)
+Project: <https://github.com/users/MahdiHbb1/projects/2>
+
 | Modul | PIC | Branch | Issue | PR | Status | Tes | Halaman |
 |---|---|---|---|---|---|---|---|
-| 1 Pekerja dan riwayat upah | Mahdi | `modul-1-pekerja` | belum dibuat | belum ada | Backlog | 5 subtes skip | 3, 4, 5 |
-| 2 Jadwal shift dan kasbon | Edgar | `modul-2-jadwal-kasbon` | belum dibuat | belum ada | Backlog | 9 subtes skip | 6, 7, 8 |
-| 3 Absensi | Zahra | `modul-3-absensi` | belum dibuat | belum ada | Backlog | 8 subtes skip | 9, 10 |
-| 4 Perhitungan gaji | Farah | `modul-4-penggajian` | belum dibuat | belum ada | Backlog | 17 subtes skip | 11, 12 |
-| 5 Periode, penutupan, koreksi | Anya | `modul-5-periode-koreksi` | belum dibuat | belum ada | Backlog | 5 subtes skip | 13, 14, 15 |
-| 6 Slip, rekap, autentikasi, UI | Fadli | `modul-6-laporan-antarmuka` | belum dibuat | belum ada | Backlog | 7 subtes skip | 1, 2, 16, 17 |
+| 1 Pekerja dan riwayat upah | Mahdi | `modul-1-pekerja` | [#1](https://github.com/MahdiHbb1/penggajian-konveksi/issues/1) | belum ada | Todo | 5 subtes skip | 3, 4, 5 |
+| 2 Jadwal shift dan kasbon | Edgar | `modul-2-jadwal-kasbon` | [#2](https://github.com/MahdiHbb1/penggajian-konveksi/issues/2) | belum ada | Todo | 9 subtes skip | 6, 7, 8 |
+| 3 Absensi | Zahra | `modul-3-absensi` | [#3](https://github.com/MahdiHbb1/penggajian-konveksi/issues/3) | belum ada | Todo | 8 subtes skip | 9, 10 |
+| 4 Perhitungan gaji | Farah | `modul-4-penggajian` | [#4](https://github.com/MahdiHbb1/penggajian-konveksi/issues/4) | belum ada | Todo | 17 subtes skip | 11, 12 |
+| 5 Periode, penutupan, koreksi | Anya | `modul-5-periode-koreksi` | [#5](https://github.com/MahdiHbb1/penggajian-konveksi/issues/5) | belum ada | Todo | 5 subtes skip | 13, 14, 15 |
+| 6 Slip, rekap, autentikasi, UI | Fadli | `modul-6-laporan-antarmuka` | [#6](https://github.com/MahdiHbb1/penggajian-konveksi/issues/6) | belum ada | Todo | 7 subtes skip | 1, 2, 16, 17 |
 
 Jumlah subtes skip dapat berubah saat tes mulai diisi. Perbarui angka ini setelah `go test ./... -v`.
 
 ## Definisi status
 
+Project memakai tiga opsi Status bawaan GitHub.
+
 | Status | Arti |
 |---|---|
-| Backlog | Belum dikerjakan, desain masih dibahas |
-| Ready | Siap dikerjakan, file dan kontrak sudah jelas |
-| In progress | Sedang dikerjakan, sudah ada commit lokal |
-| In review | Pull request ke `main` sudah dibuka dan menunggu review |
+| Todo | Belum dikerjakan atau baru ditugaskan |
+| In Progress | Sedang dikerjakan, sudah ada commit lokal |
 | Done | Pull request sudah di-merge, tes lulus, halaman sudah dicek |
+
+Review tidak punya status sendiri. Saat pull request dibuka, issue tetap `In Progress` dan PR-nya ditautkan lewat kolom **Linked pull requests** di Project. Setelah PR di-merge dan verifikasi lulus, baru pindahkan ke `Done`.
 
 ## Cara memperbarui
 

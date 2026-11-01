@@ -70,6 +70,11 @@ if ($Repo -notmatch "^[^/]+/[^/]+$") {
 Write-Host "Repo       : $Repo"
 Write-Host "Pemilik    : $Owner"
 
+$ownerLogin = $Owner
+if ($Owner -eq "@me") {
+    $ownerLogin = (Panggil-Gh @("api", "user", "-q", ".login") | Select-Object -Last 1).ToString().Trim()
+}
+
 if ($BuatProject) {
     $json = Panggil-Gh @("project", "create", "--owner", $Owner, "--title", $ProjectTitle, "--format", "json")
     $project = ($json -join "`n") | ConvertFrom-Json
@@ -99,7 +104,7 @@ foreach ($l in $label) {
 Write-Host "Label      : $($label.Count) siap"
 
 if ($ProjectNumber -gt 0) {
-    & gh project link $ProjectNumber --owner $Owner --repo $Repo 2>&1 | Out-Null
+    & gh project link $ProjectNumber --owner $ownerLogin --repo $Repo 2>$null | Out-Null
 
     $field = @(
         @{ Nama = "Modul"; Tipe = "SINGLE_SELECT"; Opsi = "1 Pekerja,2 Jadwal dan Kasbon,3 Absensi,4 Penggajian,5 Periode dan Koreksi,6 Laporan dan Antarmuka" },
@@ -112,7 +117,7 @@ if ($ProjectNumber -gt 0) {
         if ($f.Opsi) {
             $argumen += @("--single-select-options", $f.Opsi)
         }
-        & gh @argumen 2>&1 | Out-Null
+        & gh @argumen 2>$null | Out-Null
     }
     Write-Host "Field      : Modul, PIC, Branch siap atau sudah ada"
 }
