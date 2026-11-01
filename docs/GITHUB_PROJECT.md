@@ -26,7 +26,7 @@ Dokumen ini menjelaskan cara memindahkan repo ke GitHub, mengatur GitHub Project
 | Proteksi `main` | aktif: wajib pull request dan 1 approval |
 | Kolaborator | belum ada, menunggu username GitHub anggota |
 
-Semua issue sudah masuk Project dengan Status `Todo` dan field `Modul`, `PIC`, serta `Branch` terisi. Yang belum: undangan kolaborator, assign issue ke akun GitHub, dan view Project.
+Semua issue sudah masuk Project dengan Status `Todo` dan field `Modul`, `PIC`, serta `Branch` terisi. Yang belum: undangan kolaborator, assign issue ke akun GitHub, dan pengaturan grouping dua view board.
 
 ## 2. Membuat repo dan push pertama
 
@@ -108,14 +108,18 @@ gh project field-create 2 --owner @me --name "PIC" --data-type TEXT
 gh project field-create 2 --owner @me --name "Branch" --data-type TEXT
 ```
 
-Saat ini Project baru punya **View 1** bertipe table. GitHub CLI belum menyediakan perintah untuk membuat view, jadi empat view berikut dibuat manual lewat tombol **New view** di web:
+Project sudah punya tiga view:
 
 | Nama view | Tipe | Isi |
 |---|---|---|
-| Semua modul | Table | Title, Status, PIC, Modul, Branch, linked pull requests |
+| Semua modul | Table | Title, Status, Linked pull requests, Modul, PIC, Branch |
 | Papan status | Board | Group by Status |
 | Per anggota | Board | Group by PIC |
-| Butuh review | Table | Filter `is:open is:pr review-requested:@me` |
+
+GitHub CLI belum bisa mengatur grouping board, jadi dua langkah ini masih manual:
+
+1. Buka **Papan status**, klik menu view, pilih **Group by > Status**.
+2. Buka **Per anggota**, klik menu view, pilih **Group by > PIC**.
 
 Aktifkan automasi di **Project > Workflows**:
 
