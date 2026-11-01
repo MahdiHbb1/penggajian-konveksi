@@ -66,8 +66,17 @@ internal/web/            router dan renderer
 web/templates/           layout dan 17 halaman
 web/static/css/          style.css
 database/                schema.sql dan seed.sql
-docs/                    ERD, kepemilikan, laporan agent
+docs/                    ERD, kepemilikan, laporan, panduan GitHub
+.github/                 template issue dan pull request
+scripts/                 pembuat label dan issue GitHub
 ```
+
+## Tracking dan GitHub
+
+- Panduan repo, kolaborator, dan GitHub Projects: `docs/GITHUB_PROJECT.md`.
+- Rekap progres untuk laporan: `docs/PROGRES.md`.
+- Pembuat label dan issue: `scripts/siapkan-github.ps1`.
+- Satu issue per modul, satu branch per modul, dan pull request ke `main`.
 
 ## Pemeriksaan
 
@@ -89,5 +98,5 @@ Tes kerangka memakai `t.Skip` karena fungsi belum diisi. Nilai harapan tes sudah
 - Satu pemilik per folder atau file. Lihat `docs/OWNERSHIP.md`.
 - File bersama: Mahdi memegang `cmd/server`, `internal/domain`, `internal/kontrak`, `internal/config`, `internal/database`; Fadli memegang `internal/web`.
 - Jangan mengubah file milik modul lain tanpa persetujuan pemiliknya.
-- Jangan membuat remote atau melakukan push dari sesi agent.
+- Bekerja di branch modul masing-masing, lalu buka pull request ke `main`. Jangan push langsung ke `main`.
 - Semua nominal uang memakai `int64` di Go dan `BIGINT` di MySQL.
