@@ -119,7 +119,7 @@ Server dijalankan pada `http://127.0.0.1:8080`, lalu dihentikan setelah pemeriks
 - Login, logout, sesi, dan bcrypt belum berjalan; masih placeholder.
 - Seluruh aturan bisnis, query SQL, dan perhitungan belum diimplementasikan.
 - Tampilan belum diperiksa di browser sungguhan; pemeriksaan baru pada status HTTP dan isi HTML.
-- Tidak ada remote git dan tidak ada push.
+- Repo sudah dipindahkan ke GitHub dan di-push setelah pemilik tugas memberi izin. Riwayat commit kerangka tetap memakai author `Agent Kerangka`; commit anggota akan memakai akun masing-masing.
 
 ## 10. Langkah berikutnya
 

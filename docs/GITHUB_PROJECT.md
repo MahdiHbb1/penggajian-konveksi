@@ -77,7 +77,7 @@ Undang lewat web: **Settings > Collaborators > Add people**, lalu kirim username
 Atau lewat CLI:
 
 ```powershell
-gh api --method PUT repos/OWNER/REPO/collaborators/USERNAME -f permission=push
+gh api --method PUT repos/MahdiHbb1/penggajian-konveksi/collaborators/USERNAME -f permission=push
 ```
 
 Setiap anggota harus menerima undangan sebelum bisa push.
@@ -127,7 +127,7 @@ Aktifkan automasi di **Project > Workflows**:
 
 Label dan enam issue sudah dibuat di repo ini, jadi bagian ini hanya untuk mengulang atau menambah modul baru.
 
-Isi username GitHub anggota terlebih dahulu:
+Isi username GitHub anggota terlebih dahulu. Contoh sudah berisi repo dan nomor Project yang benar, jadi cukup isi username:
 
 ```powershell
 Copy-Item docs/github-anggota.example.json docs/github-anggota.json
@@ -137,7 +137,13 @@ notepad docs/github-anggota.json
 Jalankan script dari root repo:
 
 ```powershell
-.\scripts\siapkan-github.ps1 -ProjectNumber 2
+.\scripts\siapkan-github.ps1
+```
+
+Atau tentukan manual:
+
+```powershell
+.\scripts\siapkan-github.ps1 -Repo MahdiHbb1/penggajian-konveksi -ProjectNumber 2
 ```
 
 Script akan:
