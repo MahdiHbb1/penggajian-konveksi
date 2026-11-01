@@ -1,0 +1,61 @@
+{{define "konten"}}
+<!-- Pemilik: Fadli | Modul 6 -->
+<article class="slip">
+  <header class="slip-head">
+    <div>
+      <h1>Konveksi Mitra Jaya</h1>
+      <p>Slip Gaji Pekerja</p>
+    </div>
+    <div>
+      <strong>SLIP GAJI</strong>
+      <p>Periode: -</p>
+      <p>Status: -</p>
+    </div>
+  </header>
+
+  <dl class="slip-meta">
+    <div><dt>Nama</dt><dd>-</dd></div>
+    <div><dt>Kode</dt><dd>-</dd></div>
+    <div><dt>Jenis</dt><dd>-</dd></div>
+    <div><dt>Periode</dt><dd>-</dd></div>
+  </dl>
+
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Komponen</th><th>Keterangan</th><th>Jumlah</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Upah pokok</td><td>Harian: hari x tarif; bulanan: proporsional</td><td>Rp 0</td></tr>
+        <tr><td>Lembur</td><td>60 menit pertama 1,5x, berikutnya 2x</td><td>Rp 0</td></tr>
+        <tr><td>Potongan keterlambatan</td><td>Lebih dari 15 menit</td><td>Rp 0</td></tr>
+        <tr><td>Koreksi</td><td>Koreksi periode sebelumnya</td><td>Rp 0</td></tr>
+        <tr><th>Gaji bruto</th><td></td><th>Rp 0</th></tr>
+        <tr><td>Potongan kasbon</td><td>Maksimum 30% bruto</td><td>Rp 0</td></tr>
+        <tr><th>Gaji bersih</th><td></td><th>Rp 0</th></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 style="margin-top:22px;">Rincian harian</h2>
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Tanggal</th><th>Telat</th><th>Lembur</th><th>Pokok</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="4">Belum ada rincian.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Sisa kasbon:</strong> Rp 0</p>
+
+  <div class="aksi no-print">
+    <button class="btn" type="button" onclick="window.print()">Cetak</button>
+    <a class="btn btn-sekunder" href="/dashboard">Kembali</a>
+  </div>
+</article>
+
+<p class="owner no-print">Pemilik: Fadli | Modul 6</p>
+{{end}}

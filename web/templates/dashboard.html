@@ -1,0 +1,53 @@
+{{define "konten"}}
+<!-- Pemilik: Fadli | Modul 6 -->
+<section class="card-grid" aria-label="Ringkasan">
+  <article class="card">
+    <h2>Periode berjalan</h2>
+    <p class="angka">-</p>
+    <p class="ket">Status periode terbaru</p>
+  </article>
+  <article class="card">
+    <h2>Absensi belum lengkap</h2>
+    <p class="angka">0</p>
+    <p class="ket"><a href="/absensi/belum-lengkap">Periksa absensi</a></p>
+  </article>
+  <article class="card">
+    <h2>Gaji dibayar terakhir</h2>
+    <p class="angka">Rp 0</p>
+    <p class="ket">Periode terakhir yang ditutup</p>
+  </article>
+  <article class="card">
+    <h2>Total sisa kasbon</h2>
+    <p class="angka">Rp 0</p>
+    <p class="ket">Seluruh kasbon berjalan</p>
+  </article>
+</section>
+
+{{if .Admin}}
+<section class="panel">
+  <h2>Pintasan Admin</h2>
+  <div class="aksi">
+    <a class="btn" href="/absensi">Input absensi hari ini</a>
+    <a class="btn btn-sekunder" href="/penggajian">Hitung gaji</a>
+    <a class="btn btn-sekunder" href="/periode/baru">Buat periode</a>
+    <a class="btn btn-sekunder" href="/kasbon/baru">Catat kasbon</a>
+  </div>
+</section>
+{{end}}
+
+<section class="panel">
+  <h2>Periode terbaru</h2>
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Tipe</th><th>Mulai</th><th>Selesai</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="4">Belum ada data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="owner">Pemilik: Fadli | Modul 6</p>
+{{end}}

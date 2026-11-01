@@ -1,0 +1,53 @@
+{{define "konten"}}
+<!-- Pemilik: Fadli | Modul 6 -->
+<section class="panel">
+  <form class="form-grid" method="get" action="">
+    <label>Periode
+      <select name="periode_id" required>
+        <option value="">Pilih periode</option>
+      </select>
+    </label>
+    <div class="aksi">
+      <button class="btn" type="submit">Tampilkan rekap</button>
+    </div>
+  </form>
+</section>
+
+<section class="card-grid" aria-label="Ringkasan rekap">
+  <article class="card"><h2>Biaya gaji bruto</h2><p class="angka">Rp 0</p></article>
+  <article class="card"><h2>Total lembur</h2><p class="angka">Rp 0</p></article>
+  <article class="card"><h2>Total potongan kasbon</h2><p class="angka">Rp 0</p></article>
+  <article class="card"><h2>Gaji dibayarkan</h2><p class="angka">Rp 0</p></article>
+</section>
+
+<section class="panel">
+  <h2>Pekerja harian</h2>
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan</th><th>Bersih</th><th>Aksi</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Pekerja bulanan</h2>
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan</th><th>Bersih</th><th>Aksi</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  {{if .Pemilik}}<p class="ket">Tampilan Pemilik hanya baca.</p>{{end}}
+</section>
+
+<p class="owner">Pemilik: Fadli | Modul 6</p>
+{{end}}

@@ -1,0 +1,34 @@
+{{define "konten"}}
+<!-- Pemilik: Zahra | Modul 3 -->
+<section class="panel">
+  <form class="form-grid" method="get" action="/absensi/belum-lengkap">
+    <label>Periode
+      <select name="periode_id">
+        <option value="">Pilih periode</option>
+      </select>
+    </label>
+    <div class="aksi">
+      <button class="btn" type="submit">Tampilkan</button>
+    </div>
+  </form>
+</section>
+
+<div class="alert alert-info" role="status">
+  Absensi tanpa jam keluar menghalangi proses hitung gaji.
+</div>
+
+<section class="panel">
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Tanggal</th><th>Pekerja</th><th>Shift</th><th>Jam masuk</th><th>Aksi</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="5">Tidak ada absensi yang belum lengkap.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="owner">Pemilik: Zahra | Modul 3</p>
+{{end}}

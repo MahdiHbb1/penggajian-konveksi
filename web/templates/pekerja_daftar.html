@@ -1,0 +1,47 @@
+{{define "konten"}}
+<!-- Pemilik: Mahdi | Modul 1 -->
+<section class="panel">
+  <form class="form-grid" method="get" action="/pekerja">
+    <label>Cari nama atau kode
+      <input type="search" name="cari" placeholder="Contoh: P-001 atau Budi">
+    </label>
+    <label>Jenis
+      <select name="jenis">
+        <option value="">Semua jenis</option>
+        <option value="HARIAN">Harian</option>
+        <option value="BULANAN">Bulanan</option>
+      </select>
+    </label>
+    <label>Status
+      <select name="aktif">
+        <option value="">Semua status</option>
+        <option value="1">Aktif</option>
+        <option value="0">Nonaktif</option>
+      </select>
+    </label>
+    <div class="aksi">
+      <button class="btn" type="submit">Terapkan filter</button>
+      <a class="btn btn-sekunder" href="/pekerja">Reset</a>
+    </div>
+  </form>
+</section>
+
+<div class="aksi" style="margin-bottom: 14px;">
+  <a class="btn" href="/pekerja/baru">+ Pekerja baru</a>
+</div>
+
+<section class="panel">
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Kode</th><th>Nama</th><th>Jenis</th><th>Mulai kerja</th><th>Status</th><th>Aksi</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="owner">Pemilik: Mahdi | Modul 1</p>
+{{end}}

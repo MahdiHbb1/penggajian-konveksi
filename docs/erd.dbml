@@ -1,0 +1,141 @@
+// Pemilik: Mahdi | Modul 1 | Aturan: 1, 2, 3, 8, 12, 13, 15
+// DBML ini harus konsisten dengan database/schema.sql.
+// Tempel isi file ini ke dbdiagram.io.
+
+Table pekerja {
+  id bigint [pk, increment]
+  kode varchar(20) [not null, unique]
+  nama varchar(100) [not null]
+  jenis varchar(10) [not null, note: 'HARIAN atau BULANAN']
+  tanggal_mulai date [not null]
+  tanggal_berhenti date [null]
+  aktif boolean [not null, default: true]
+
+  Note: 'Pekerja tidak dihapus. Status diturunkan dari aktif.'
+}
+
+Table riwayat_upah {
+  id bigint [pk, increment]
+  pekerja_id bigint [not null, ref: > pekerja.id]
+  nominal bigint [not null, note: 'Rupiah, lebih dari 0']
+  berlaku_mulai date [not null]
+  alasan varchar(100) [null]
+
+  indexes {
+    (pekerja_id, berlaku_mulai) [unique]
+  }
+}
+
+Table shift {
+  id bigint [pk, increment]
+  nama varchar(30) [not null, unique]
+  jam_mulai time [not null]
+  jam_selesai time [not null]
+}
+
+Table jadwal_shift {
+  id bigint [pk, increment]
+  pekerja_id bigint [not null, ref: > pekerja.id]
+  shift_id bigint [not null, ref: > shift.id]
+  tanggal date [not null]
+
+  indexes {
+    (pekerja_id, tanggal) [unique]
+  }
+}
+
+Table absensi {
+  id bigint [pk, increment]
+  jadwal_shift_id bigint [not null, unique, ref: > jadwal_shift.id]
+  jam_masuk datetime [not null]
+  jam_keluar datetime [null]
+}
+
+Table periode_gaji {
+  id bigint [pk, increment]
+  tipe varchar(10) [not null, note: 'MINGGUAN atau BULANAN']
+  tanggal_mulai date [not null]
+  tanggal_selesai date [not null]
+  status varchar(10) [not null, default: 'TERBUKA', note: 'TERBUKA, DIHITUNG, DITUTUP']
+  ditutup_pada datetime [null]
+
+  indexes {
+    (tipe, tanggal_mulai) [unique]
+  }
+}
+
+Table kasbon {
+  id bigint [pk, increment]
+  pekerja_id bigint [not null, ref: > pekerja.id]
+  tanggal date [not null]
+  jumlah bigint [not null]
+  sisa bigint [not null, note: 'Status Berjalan bila sisa > 0']
+  keterangan varchar(150) [null]
+}
+
+Table slip_gaji {
+  id bigint [pk, increment]
+  periode_id bigint [not null, ref: > periode_gaji.id]
+  pekerja_id bigint [not null, ref: > pekerja.id]
+  upah_pokok bigint [not null]
+  total_lembur bigint [not null, default: 0]
+  potongan_telat bigint [not null, default: 0]
+  total_koreksi bigint [not null, default: 0, note: 'Boleh negatif']
+  gaji_bruto bigint [not null]
+  potongan_kasbon bigint [not null, default: 0]
+  gaji_bersih bigint [not null]
+  hari_kerja_dibayar int [not null, default: 0]
+  hari_kerja_periode int [null]
+  dibuat_pada datetime [not null]
+
+  indexes {
+    (periode_id, pekerja_id) [unique]
+  }
+}
+
+Table slip_gaji_detail {
+  id bigint [pk, increment]
+  slip_id bigint [not null, ref: > slip_gaji.id]
+  absensi_id bigint [not null, ref: > absensi.id]
+  tanggal date [not null]
+  upah_pokok_hari bigint [not null]
+  upah_per_jam bigint [not null]
+  menit_telat int [not null, default: 0]
+  potongan_telat bigint [not null, default: 0]
+  menit_lembur int [not null, default: 0]
+  upah_lembur bigint [not null, default: 0]
+
+  indexes {
+    (slip_id, absensi_id) [unique]
+  }
+}
+
+Table potongan_kasbon {
+  id bigint [pk, increment]
+  slip_id bigint [not null, ref: > slip_gaji.id]
+  kasbon_id bigint [not null, ref: > kasbon.id]
+  jumlah bigint [not null]
+
+  indexes {
+    (slip_id, kasbon_id) [unique]
+  }
+}
+
+Table koreksi_gaji {
+  id bigint [pk, increment]
+  pekerja_id bigint [not null, ref: > pekerja.id]
+  periode_asal_id bigint [not null, ref: > periode_gaji.id]
+  periode_terapan_id bigint [null, ref: > periode_gaji.id]
+  jumlah bigint [not null, note: 'Boleh negatif, tidak boleh 0']
+  keterangan varchar(200) [not null]
+  dibuat_pada datetime [not null]
+
+  Note: 'Status Menunggu bila periode_terapan_id kosong.'
+}
+
+Table pengguna {
+  id bigint [pk, increment]
+  username varchar(50) [not null, unique]
+  password_hash varchar(255) [not null]
+  role varchar(10) [not null, note: 'ADMIN atau PEMILIK']
+}

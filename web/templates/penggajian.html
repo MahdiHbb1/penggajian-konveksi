@@ -1,0 +1,50 @@
+{{define "konten"}}
+<!-- Pemilik: Farah | Modul 4 -->
+<section class="panel">
+  <form class="form-grid" method="post" action="/penggajian">
+    <label>Periode
+      <select name="periode_id" required>
+        <option value="">Pilih periode</option>
+      </select>
+    </label>
+    <label>Status periode
+      <input type="text" value="-" readonly>
+    </label>
+    <div class="aksi">
+      <button class="btn" type="submit">Hitung gaji</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Pemeriksaan prasyarat</h2>
+  <ul>
+    <li>Periode berstatus Terbuka atau Dihitung.</li>
+    <li>Periode sebelumnya dengan tipe sama sudah ditutup.</li>
+    <li>Tidak ada absensi tanpa jam keluar.</li>
+  </ul>
+  <p class="ket">Hasil pemeriksaan akan menampilkan Lolos atau Gagal beserta daftar absensi yang kurang.</p>
+</section>
+
+<section class="panel">
+  <h2>Hasil hitung</h2>
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Pekerja</th><th>Pokok</th><th>Lembur</th><th>Potongan telat</th><th>Koreksi</th><th>Bruto</th><th>Potongan kasbon</th><th>Bersih</th><th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="9">Belum ada hasil hitung.</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><th colspan="5">Total</th><td>Rp 0</td><td>Rp 0</td><td>Rp 0</td><td></td></tr>
+      </tfoot>
+    </table>
+  </div>
+  <p class="ket">Hitung ulang menimpa slip lama pada periode yang sama.</p>
+</section>
+
+<p class="owner">Pemilik: Farah | Modul 4</p>
+{{end}}

@@ -1,0 +1,46 @@
+{{define "konten"}}
+<!-- Pemilik: Anya | Modul 5 -->
+<div class="dua-kolom">
+  <section class="panel">
+    <h2>Daftar koreksi</h2>
+    <div class="tabel-wrap">
+      <table>
+        <thead>
+          <tr><th>Tanggal</th><th>Pekerja</th><th>Periode asal</th><th>Nominal</th><th>Status</th><th>Periode penerapan</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Koreksi baru</h2>
+    <form method="post" action="/koreksi/baru">
+      <label>Pekerja
+        <select name="pekerja_id" required>
+          <option value="">Pilih pekerja</option>
+        </select>
+      </label>
+      <label style="margin-top:12px;">Periode asal
+        <select name="periode_asal_id" required>
+          <option value="">Pilih periode yang sudah ditutup</option>
+        </select>
+      </label>
+      <label style="margin-top:12px;">Nominal (boleh negatif)
+        <input type="number" name="jumlah" step="1" required>
+      </label>
+      <label style="margin-top:12px;">Alasan
+        <textarea name="keterangan" maxlength="200" required></textarea>
+      </label>
+      <p class="ket">Koreksi masuk ke slip periode berikutnya. Status Menunggu sampai periode penerapan dihitung.</p>
+      <div class="aksi">
+        <button class="btn" type="submit">Simpan koreksi</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<p class="owner">Pemilik: Anya | Modul 5</p>
+{{end}}

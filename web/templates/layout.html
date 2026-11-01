@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Judul}} - Penggajian Konveksi</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+{{if .Polos}}
+  <main class="auth-shell">
+    {{template "konten" .}}
+  </main>
+{{else}}
+  <header class="app-header">
+    <a class="brand" href="/dashboard">Penggajian Konveksi</a>
+    <nav class="app-nav" aria-label="Navigasi utama">
+      <a href="/dashboard" {{if eq .Aktif "dashboard"}}class="aktif"{{end}}>Dashboard</a>
+      {{if .Admin}}
+        <a href="/pekerja" {{if eq .Aktif "pekerja"}}class="aktif"{{end}}>Pekerja</a>
+        <a href="/jadwal" {{if eq .Aktif "jadwal"}}class="aktif"{{end}}>Jadwal</a>
+        <a href="/kasbon" {{if eq .Aktif "kasbon"}}class="aktif"{{end}}>Kasbon</a>
+        <a href="/absensi" {{if eq .Aktif "absensi"}}class="aktif"{{end}}>Absensi</a>
+        <a href="/penggajian" {{if eq .Aktif "penggajian"}}class="aktif"{{end}}>Penggajian</a>
+        <a href="/periode" {{if eq .Aktif "periode"}}class="aktif"{{end}}>Periode</a>
+        <a href="/koreksi" {{if eq .Aktif "koreksi"}}class="aktif"{{end}}>Koreksi</a>
+        <a href="/rekap/0" {{if eq .Aktif "rekap"}}class="aktif"{{end}}>Rekap</a>
+      {{end}}
+      {{if .Pemilik}}
+        <a href="/rekap/0" {{if eq .Aktif "rekap"}}class="aktif"{{end}}>Rekap</a>
+      {{end}}
+    </nav>
+    <div class="user-box">
+      {{with .Pengguna}}<span>{{.Username}} | {{.NamaPeran}}</span>{{end}}
+      <form method="post" action="/logout">
+        <button class="btn btn-kecil" type="submit">Keluar</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-head">
+      <h1>{{.Judul}}</h1>
+      <p class="page-note">Kerangka modul. Data dan aksi belum diimplementasikan.</p>
+    </div>
+
+    {{if .Galat}}<div class="alert alert-error" role="alert">{{.Galat}}</div>{{end}}
+    {{if .Info}}<div class="alert alert-info" role="status">{{.Info}}</div>{{end}}
+
+    {{template "konten" .}}
+  </main>
+
+  <footer class="app-footer">
+    Sistem Penggajian Konveksi Mitra Jaya | 6 modul | 17 halaman
+  </footer>
+{{end}}
+</body>
+</html>

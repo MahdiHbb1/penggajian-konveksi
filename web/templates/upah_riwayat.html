@@ -1,0 +1,39 @@
+{{define "konten"}}
+<!-- Pemilik: Mahdi | Modul 1 -->
+<div class="dua-kolom">
+  <section class="panel">
+    <h2>Riwayat upah</h2>
+    <div class="tabel-wrap">
+      <table>
+        <thead>
+          <tr><th>Berlaku mulai</th><th>Nominal</th><th>Alasan</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="kosong" colspan="3">Belum ada data.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Tambah upah</h2>
+    <form method="post" action="">
+      <label>Nominal baru (rupiah)
+        <input type="number" name="nominal" min="1" step="1" required>
+      </label>
+      <label style="margin-top:12px;">Berlaku mulai
+        <input type="date" name="berlaku_mulai" required>
+      </label>
+      <label style="margin-top:12px;">Alasan
+        <input type="text" name="alasan" maxlength="100">
+      </label>
+      <p class="ket">Jika tanggal berlaku berada di periode tertutup, selisihnya harus dimasukkan sebagai koreksi.</p>
+      <div class="aksi">
+        <button class="btn" type="submit">Simpan upah</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<p class="owner">Pemilik: Mahdi | Modul 1</p>
+{{end}}

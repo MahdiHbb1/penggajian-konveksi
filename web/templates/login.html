@@ -1,0 +1,17 @@
+{{define "konten"}}
+<!-- Pemilik: Fadli | Modul 6 -->
+<section class="auth-card">
+  <h1>Masuk</h1>
+  <p>Sistem Penggajian Konveksi Mitra Jaya</p>
+  <form method="post" action="/login">
+    <label>Username
+      <input type="text" name="username" autocomplete="username" required>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button class="btn" type="submit">Masuk</button>
+  </form>
+  <p class="owner">Pemilik: Fadli | Modul 6</p>
+</section>
+{{end}}

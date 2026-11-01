@@ -1,0 +1,32 @@
+{{define "konten"}}
+<!-- Pemilik: Zahra | Modul 3 -->
+<section class="panel">
+  <form class="form-grid" method="post" action="/absensi">
+    <label>Tanggal absensi
+      <input type="date" name="tanggal" required>
+    </label>
+    <div class="aksi">
+      <button class="btn" type="submit">Simpan absensi</button>
+    </div>
+  </form>
+  <p class="ket">Hanya pekerja yang punya jadwal pada tanggal itu yang tampil. Jam keluar boleh kosong sementara.</p>
+</section>
+
+<section class="panel">
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Pekerja</th><th>Shift</th><th>Jam shift</th><th>Jam masuk</th><th>Jam keluar</th><th>Terlambat</th><th>Lembur</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="7">Belum ada jadwal pada tanggal ini.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="ket">Pratinjau menit terlambat dan lembur dihitung per baris. Shift siang yang keluar lewat tengah malam otomatis memakai tanggal berikutnya.</p>
+</section>
+
+<p class="owner">Pemilik: Zahra | Modul 3</p>
+{{end}}

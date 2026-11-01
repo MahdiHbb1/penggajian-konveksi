@@ -1,0 +1,42 @@
+{{define "konten"}}
+<!-- Pemilik: Edgar | Modul 2 -->
+<section class="panel">
+  <form class="form-grid" method="get" action="/kasbon">
+    <label>Pekerja
+      <select name="pekerja_id">
+        <option value="">Semua pekerja</option>
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="">Semua status</option>
+        <option value="BERJALAN">Berjalan</option>
+        <option value="LUNAS">Lunas</option>
+      </select>
+    </label>
+    <div class="aksi">
+      <button class="btn" type="submit">Terapkan filter</button>
+      <a class="btn btn-sekunder" href="/kasbon">Reset</a>
+    </div>
+  </form>
+</section>
+
+<div class="aksi" style="margin-bottom: 14px;">
+  <a class="btn" href="/kasbon/baru">+ Kasbon baru</a>
+</div>
+
+<section class="panel">
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr><th>Tanggal</th><th>Pekerja</th><th>Jumlah</th><th>Sisa</th><th>Status</th><th>Aksi</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="owner">Pemilik: Edgar | Modul 2</p>
+{{end}}

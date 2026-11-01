@@ -1,0 +1,40 @@
+{{define "konten"}}
+<!-- Pemilik: Mahdi | Modul 1 -->
+<section class="panel">
+  <form class="form-grid" method="post" action="">
+    <label>Kode pekerja
+      <input type="text" name="kode" maxlength="20" required placeholder="P-001">
+    </label>
+    <label>Nama lengkap
+      <input type="text" name="nama" maxlength="100" required>
+    </label>
+    <fieldset class="penuh">
+      <legend>Jenis pekerja</legend>
+      <label style="display:inline-flex; gap:8px; margin-right:18px;">
+        <input type="radio" name="jenis" value="HARIAN" required> Harian
+      </label>
+      <label style="display:inline-flex; gap:8px;">
+        <input type="radio" name="jenis" value="BULANAN" required> Bulanan
+      </label>
+      <p class="ket">Jenis tidak dapat diubah setelah disimpan.</p>
+    </fieldset>
+    <label>Tanggal mulai kerja
+      <input type="date" name="tanggal_mulai" required>
+    </label>
+    <label>Upah awal (rupiah)
+      <input type="number" name="upah_awal" min="1" step="1" placeholder="100000">
+      <span class="ket">Hanya diisi saat menambah pekerja. Upah pertama dibuat otomatis pada tanggal mulai.</span>
+    </label>
+    <label>Tanggal berhenti
+      <input type="date" name="tanggal_berhenti">
+      <span class="ket">Hanya diisi saat mengubah pekerja yang berhenti.</span>
+    </label>
+    <div class="aksi penuh">
+      <button class="btn" type="submit">Simpan</button>
+      <a class="btn btn-sekunder" href="/pekerja">Batal</a>
+    </div>
+  </form>
+</section>
+
+<p class="owner">Pemilik: Mahdi | Modul 1</p>
+{{end}}

@@ -1,0 +1,39 @@
+{{define "konten"}}
+<!-- Pemilik: Anya | Modul 5 -->
+<div class="dua-kolom">
+  <section class="panel">
+    <h2>Daftar periode</h2>
+    <div class="tabel-wrap">
+      <table>
+        <thead>
+          <tr><th>Tipe</th><th>Mulai</th><th>Selesai</th><th>Status</th><th>Aksi</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="kosong" colspan="5">Belum ada data.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Buat periode</h2>
+    <form method="post" action="/periode/baru">
+      <label>Tipe
+        <select name="tipe" required>
+          <option value="MINGGUAN">Mingguan</option>
+          <option value="BULANAN">Bulanan</option>
+        </select>
+      </label>
+      <label style="margin-top:12px;">Tanggal mulai
+        <input type="date" name="tanggal_mulai" required>
+      </label>
+      <p class="ket">Mingguan wajib mulai Senin. Bulanan wajib mulai tanggal 1.</p>
+      <div class="aksi">
+        <button class="btn" type="submit">Buat periode</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<p class="owner">Pemilik: Anya | Modul 5</p>
+{{end}}

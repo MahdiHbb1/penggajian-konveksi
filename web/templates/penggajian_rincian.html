@@ -1,0 +1,46 @@
+{{define "konten"}}
+<!-- Pemilik: Farah | Modul 4 -->
+<section class="card-grid">
+  <article class="card"><h2>Upah harian</h2><p class="angka">Rp 0</p></article>
+  <article class="card"><h2>Upah per jam</h2><p class="angka">Rp 0</p></article>
+  <article class="card"><h2>Hari hadir</h2><p class="angka">0</p></article>
+  <article class="card"><h2>Hari kerja periode</h2><p class="angka">0</p></article>
+</section>
+
+<section class="panel">
+  <h2>Rincian harian</h2>
+  <div class="tabel-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tanggal</th><th>Shift</th><th>Masuk</th><th>Keluar</th><th>Menit telat</th><th>Potongan telat</th><th>Menit lembur</th><th>Upah lembur</th><th>Upah pokok</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="kosong" colspan="9">Belum ada rincian.</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><th colspan="5">Jumlah</th><td>Rp 0</td><td></td><td>Rp 0</td><td>Rp 0</td></tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Ringkasan</h2>
+  <dl class="slip-meta">
+    <dt>Gaji bruto</dt><dd>Rp 0</dd>
+    <dt>Potongan kasbon</dt><dd>Rp 0</dd>
+    <dt>Gaji bersih</dt><dd>Rp 0</dd>
+    <dt>Sisa kasbon</dt><dd>Rp 0</dd>
+  </dl>
+  <div class="aksi">
+    <form method="post" action="/penggajian/0/hitung-ulang">
+      <button class="btn btn-sekunder" type="submit">Hitung ulang</button>
+    </form>
+    <a class="btn btn-sekunder" href="/penggajian">Kembali</a>
+  </div>
+</section>
+
+<p class="owner">Pemilik: Farah | Modul 4</p>
+{{end}}

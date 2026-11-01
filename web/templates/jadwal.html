@@ -1,0 +1,41 @@
+{{define "konten"}}
+<!-- Pemilik: Edgar | Modul 2 -->
+<section class="panel">
+  <div class="aksi" style="justify-content: space-between;">
+    <div class="aksi" style="margin-top:0;">
+      <a class="btn btn-sekunder" href="/jadwal?minggu=-1">Minggu sebelumnya</a>
+      <a class="btn btn-sekunder" href="/jadwal?minggu=1">Minggu berikutnya</a>
+    </div>
+    <div class="aksi" style="margin-top:0;">
+      <form method="post" action="/jadwal/salin">
+        <button class="btn btn-sekunder" type="submit">Salin dari minggu lalu</button>
+      </form>
+    </div>
+  </div>
+  <p class="ket">Rentang tanggal: belum dipilih. Minggu tidak dijadwalkan. Salin tidak menimpa sel yang sudah terisi.</p>
+</section>
+
+<form method="post" action="/jadwal">
+  <section class="panel">
+    <div class="tabel-wrap">
+      <table class="grid-shift">
+        <thead>
+          <tr>
+            <th>Pekerja</th>
+            <th>Senin</th><th>Selasa</th><th>Rabu</th><th>Kamis</th><th>Jumat</th><th>Sabtu</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="kosong" colspan="7">Belum ada pekerja aktif untuk dijadwalkan.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="ket">Sel terkunci jika sudah ada absensi atau periode ditutup. Pilihan shift: Pagi, Siang, atau kosong.</p>
+    <div class="aksi">
+      <button class="btn" type="submit">Simpan jadwal</button>
+    </div>
+  </section>
+</form>
+
+<p class="owner">Pemilik: Edgar | Modul 2</p>
+{{end}}

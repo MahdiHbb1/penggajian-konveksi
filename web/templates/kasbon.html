@@ -1,0 +1,50 @@
+{{define "konten"}}
+<!-- Pemilik: Edgar | Modul 2 -->
+<div class="dua-kolom">
+  <section class="panel">
+    <h2>Kasbon</h2>
+    <form method="post" action="/kasbon/baru">
+      <label>Pekerja aktif
+        <select name="pekerja_id" required>
+          <option value="">Pilih pekerja</option>
+        </select>
+      </label>
+      <label style="margin-top:12px;">Tanggal
+        <input type="date" name="tanggal" required>
+      </label>
+      <label style="margin-top:12px;">Jumlah (rupiah)
+        <input type="number" name="jumlah" min="1" step="1" required>
+      </label>
+      <label style="margin-top:12px;">Keterangan
+        <input type="text" name="keterangan" maxlength="150">
+      </label>
+      <div class="aksi">
+        <button class="btn" type="submit">Simpan kasbon</button>
+        <a class="btn btn-sekunder" href="/kasbon">Batal</a>
+      </div>
+    </form>
+  </section>
+
+  <aside class="panel">
+    <h2>Ringkasan</h2>
+    <dl class="slip-meta">
+      <dt>Jumlah kasbon</dt><dd>Rp 0</dd>
+      <dt>Sisa</dt><dd>Rp 0</dd>
+    </dl>
+    <h3>Riwayat potongan</h3>
+    <div class="tabel-wrap">
+      <table>
+        <thead>
+          <tr><th>Periode</th><th>Dipotong</th><th>Sisa</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="kosong" colspan="3">Belum ada potongan.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="ket">Sisa diperbarui saat periode ditutup.</p>
+  </aside>
+</div>
+
+<p class="owner">Pemilik: Edgar | Modul 2</p>
+{{end}}

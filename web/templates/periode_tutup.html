@@ -1,0 +1,31 @@
+{{define "konten"}}
+<!-- Pemilik: Anya | Modul 5 -->
+<section class="panel">
+  <h2>Ringkasan penutupan</h2>
+  <dl class="slip-meta">
+    <dt>Jumlah slip</dt><dd>0</dd>
+    <dt>Total gaji bersih</dt><dd>Rp 0</dd>
+    <dt>Total potongan kasbon</dt><dd>Rp 0</dd>
+    <dt>Koreksi diterapkan</dt><dd>0</dd>
+  </dl>
+</section>
+
+<div class="alert alert-info" role="status">
+  Setelah ditutup, absensi, jadwal, dan kasbon pada periode ini terkunci. Slip tidak dapat dihitung ulang.
+</div>
+
+<section class="panel">
+  <form method="post" action="">
+    <label style="display:flex; align-items:flex-start; gap:10px; font-weight:400;">
+      <input type="checkbox" name="sudah_dibayar" value="1" required style="width:auto; min-height:auto; margin-top:3px;">
+      <span>Saya sudah membayarkan gaji periode ini.</span>
+    </label>
+    <div class="aksi">
+      <button class="btn" type="submit">Tutup periode</button>
+      <a class="btn btn-sekunder" href="/periode">Batal</a>
+    </div>
+  </form>
+</section>
+
+<p class="owner">Pemilik: Anya | Modul 5</p>
+{{end}}
