@@ -4,14 +4,14 @@ Satu file atau folder hanya punya satu pemilik review. Tabel ini adalah default;
 
 ## Ringkasan
 
-| Anggota | Modul | Branch | Folder utama | Halaman |
-|---|---|---|---|---|
-| Mahdi | 1. Pekerja dan riwayat upah | `modul-1-pekerja` | `internal/pekerja`, `internal/config`, `internal/database`, `internal/domain`, `internal/kontrak`, `database`, `cmd/server` | 3, 4, 5 |
-| Edgar | 2. Jadwal shift dan kasbon | `modul-2-jadwal-kasbon` | `internal/jadwal`, `internal/kasbon` | 6, 7, 8 |
-| Zahra | 3. Absensi | `modul-3-absensi` | `internal/absensi` | 9, 10 |
-| Farah | 4. Perhitungan gaji | `modul-4-penggajian` | `internal/penggajian` | 11, 12 |
-| Anya | 5. Periode, penutupan, koreksi | `modul-5-periode-koreksi` | `internal/periode` | 13, 14, 15 |
-| Fadli | 6. Slip, rekap, antarmuka | `modul-6-laporan-antarmuka` | `internal/laporan`, `internal/auth`, `internal/web`, `web` | 1, 2, 16, 17 |
+| Anggota | GitHub | Modul | Branch | Folder utama | Halaman |
+|---|---|---|---|---|---|
+| Mahdi | `@MahdiHbb1` | 1. Pekerja dan riwayat upah | `modul-1-pekerja` | `internal/pekerja`, `internal/config`, `internal/database`, `internal/domain`, `internal/kontrak`, `database`, `cmd/server` | 3, 4, 5 |
+| Edgar | `@edgar8989` | 2. Jadwal shift dan kasbon | `modul-2-jadwal-kasbon` | `internal/jadwal`, `internal/kasbon` | 6, 7, 8 |
+| Zahra | `@Raatsum` | 3. Absensi | `modul-3-absensi` | `internal/absensi` | 9, 10 |
+| Farah | `@ffaraahw` | 4. Perhitungan gaji | `modul-4-penggajian` | `internal/penggajian` | 11, 12 |
+| Anya | `@anyaa-k` | 5. Periode, penutupan, koreksi | `modul-5-periode-koreksi` | `internal/periode` | 13, 14, 15 |
+| Fadli | `@fadlinugraha15` | 6. Slip, rekap, antarmuka | `modul-6-laporan-antarmuka` | `internal/laporan`, `internal/auth`, `internal/web`, `web` | 1, 2, 16, 17 |
 
 ## Mahdi
 

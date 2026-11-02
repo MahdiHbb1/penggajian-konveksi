@@ -24,9 +24,9 @@ Dokumen ini menjelaskan cara memindahkan repo ke GitHub, mengatur GitHub Project
 | Label | `modul-1` sampai `modul-6`, `implementasi`, `tes`, `dokumen` |
 | Field Project | `Modul`, `PIC`, `Branch` |
 | Proteksi `main` | aktif: wajib pull request dan 1 approval |
-| Kolaborator | belum ada, menunggu username GitHub anggota |
+| Kolaborator | 5 undangan terkirim, menunggu diterima |
 
-Semua issue sudah masuk Project dengan Status `Todo` dan field `Modul`, `PIC`, serta `Branch` terisi. Yang belum: undangan kolaborator, assign issue ke akun GitHub, dan pengaturan grouping dua view board.
+Semua issue sudah masuk Project dengan Status `Todo`, field `Modul`, `PIC`, serta `Branch` terisi. Assignee GitHub baru bisa ditetapkan setelah undangan collaborator diterima; sementara ini nama PIC tetap terlihat di field `PIC`. Yang belum: penerimaan undangan oleh anggota dan grouping dua view board.
 
 ## 2. Membuat repo dan push pertama
 
@@ -81,6 +81,29 @@ gh api --method PUT repos/MahdiHbb1/penggajian-konveksi/collaborators/USERNAME -
 ```
 
 Setiap anggota harus menerima undangan sebelum bisa push.
+
+Pemetaan anggota saat ini:
+
+| Anggota | GitHub | Modul |
+|---|---|---|
+| Mahdi | [@MahdiHbb1](https://github.com/MahdiHbb1) | 1 Pekerja dan riwayat upah |
+| Edgar | [@edgar8989](https://github.com/edgar8989) | 2 Jadwal shift dan kasbon |
+| Zahra | [@Raatsum](https://github.com/Raatsum) | 3 Absensi |
+| Farah | [@ffaraahw](https://github.com/ffaraahw) | 4 Perhitungan gaji |
+| Anya | [@anyaa-k](https://github.com/anyaa-k) | 5 Periode, penutupan, koreksi |
+| Fadli | [@fadlinugraha15](https://github.com/fadlinugraha15) | 6 Slip, rekap, autentikasi, antarmuka |
+
+Pemetaan yang sama disimpan di `docs/github-anggota.json` dan dipakai `scripts/siapkan-github.ps1` untuk assign issue. Kelima anggota juga sudah ditambahkan sebagai collaborator Project dengan akses `WRITE`.
+
+GitHub tidak mengizinkan assign issue ke orang yang undangannya belum diterima. Setelah semua anggota menerima undangan, jalankan assign ulang:
+
+```powershell
+gh issue edit 2 --repo MahdiHbb1/penggajian-konveksi --add-assignee edgar8989
+gh issue edit 3 --repo MahdiHbb1/penggajian-konveksi --add-assignee Raatsum
+gh issue edit 4 --repo MahdiHbb1/penggajian-konveksi --add-assignee ffaraahw
+gh issue edit 5 --repo MahdiHbb1/penggajian-konveksi --add-assignee anyaa-k
+gh issue edit 6 --repo MahdiHbb1/penggajian-konveksi --add-assignee fadlinugraha15
+```
 
 ## 4. GitHub Project
 
