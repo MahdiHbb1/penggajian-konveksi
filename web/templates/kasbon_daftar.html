@@ -1,18 +1,20 @@
 {{define "konten"}}
 <!-- Pemilik: Edgar | Modul 2 -->
-<!-- TODO(Edgar): isi tabel dari Service.DaftarKasbon dan filter status. -->
 <section class="panel">
   <form class="form-grid" method="get" action="/kasbon">
     <label>Pekerja
       <select name="pekerja_id">
         <option value="">Semua pekerja</option>
+        {{range .Isi.Pekerja}}
+        <option value="{{.ID}}" {{if eq .ID $.Isi.PekerjaTerpilih}}selected{{end}}>{{.Kode}} - {{.Nama}}</option>
+        {{end}}
       </select>
     </label>
     <label>Status
       <select name="status">
         <option value="">Semua status</option>
-        <option value="BERJALAN">Berjalan</option>
-        <option value="LUNAS">Lunas</option>
+        <option value="BERJALAN" {{if eq .Isi.Status "BERJALAN"}}selected{{end}}>Berjalan</option>
+        <option value="LUNAS" {{if eq .Isi.Status "LUNAS"}}selected{{end}}>Lunas</option>
       </select>
     </label>
     <div class="aksi">
@@ -30,10 +32,21 @@
   <div class="tabel-wrap">
     <table>
       <thead>
-        <tr><th>Tanggal</th><th>Pekerja</th><th>Jumlah</th><th>Sisa</th><th>Status</th><th>Aksi</th></tr>
+        <tr><th>Tanggal</th><th>Pekerja</th><th>Jumlah (Rp)</th><th>Sisa (Rp)</th><th>Status</th><th>Aksi</th></tr>
       </thead>
       <tbody>
+        {{range .Isi.Baris}}
+        <tr>
+          <td>{{.Tanggal}}</td>
+          <td>{{.Pekerja}}</td>
+          <td>{{.Jumlah}}</td>
+          <td>{{.Sisa}}</td>
+          <td>{{.Status}}</td>
+          <td><a class="btn btn-kecil" href="/kasbon/{{.ID}}">Detail</a></td>
+        </tr>
+        {{else}}
         <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+        {{end}}
       </tbody>
     </table>
   </div>
