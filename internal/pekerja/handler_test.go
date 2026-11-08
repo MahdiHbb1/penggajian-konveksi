@@ -373,6 +373,47 @@ func TestGalatDatabaseMenjadi500TanpaMembocorkanDetail(t *testing.T) {
 	}
 }
 
+func TestGalatDatabasePadaFormUbahMenjadi500(t *testing.T) {
+	mux, repo := newTestMux(t)
+	repo.err = errors.New("database mati")
+
+	hasil := minta(mux, "/pekerja/1/ubah")
+	if hasil.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, ingin 500", hasil.Code)
+	}
+	if strings.Contains(hasil.Body.String(), "database mati") {
+		t.Fatal("detail galat server bocor ke pengguna")
+	}
+}
+
+func TestNonaktifkanPekerjaTidakAda(t *testing.T) {
+	mux, _ := newTestMux(t)
+	hasil := kirimForm(mux, "/pekerja/99/nonaktif", url.Values{})
+	if hasil.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, ingin 404", hasil.Code)
+	}
+}
+
+func TestSimpanUpahNominalDenganTitik(t *testing.T) {
+	mux, repo := newTestMux(t)
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+
+	hasil := kirimForm(mux, "/pekerja/1/upah", url.Values{
+		"nominal":       {"100.000"},
+		"berlaku_mulai": {"2026-11-05"},
+	})
+	if hasil.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, ingin 303; body: %s", hasil.Code, hasil.Body.String())
+	}
+	riwayat := repo.upah[pekerja.ID]
+	if len(riwayat) != 1 || riwayat[0].Nominal != 100000 {
+		t.Fatalf("riwayat = %+v, ingin nominal 100000", riwayat)
+	}
+}
+
 func TestNonaktifkanPekerjaDariDaftar(t *testing.T) {
 	mux, repo := newTestMux(t)
 	pekerja := seedPekerja(t, repo, domain.Pekerja{

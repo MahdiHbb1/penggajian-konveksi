@@ -192,7 +192,7 @@ func (f *fakeRepository) DaftarUpah(_ context.Context, pekerjaID int64) ([]domai
 		if samaTanggal(hasil[i].BerlakuMulai, hasil[j].BerlakuMulai) {
 			return hasil[i].ID > hasil[j].ID
 		}
-		return hasil[i].BerlakuMulai.After(hasil[j].BerlakuMulai)
+		return tanggalSetelah(hasil[i].BerlakuMulai, hasil[j].BerlakuMulai)
 	})
 	return hasil, nil
 }
@@ -204,10 +204,10 @@ func (f *fakeRepository) UpahBerlaku(_ context.Context, pekerjaID int64, tanggal
 	var terpilih domain.Upah
 	ada := false
 	for _, upah := range f.upah[pekerjaID] {
-		if tanggalSaja(upah.BerlakuMulai).After(tanggalSaja(tanggal)) {
+		if tanggalSetelah(upah.BerlakuMulai, tanggal) {
 			continue
 		}
-		if !ada || upah.BerlakuMulai.After(terpilih.BerlakuMulai) ||
+		if !ada || tanggalSetelah(upah.BerlakuMulai, terpilih.BerlakuMulai) ||
 			(samaTanggal(upah.BerlakuMulai, terpilih.BerlakuMulai) && upah.ID > terpilih.ID) {
 			terpilih = upah
 			ada = true
@@ -242,10 +242,10 @@ func (f *fakeRepository) PekerjaAktif(_ context.Context, jenis domain.JenisPeker
 		if jenis != "" && pekerja.Jenis != jenis {
 			continue
 		}
-		if tanggalSaja(pekerja.TanggalMulai).After(selesai) {
+		if tanggalSetelah(pekerja.TanggalMulai, selesai) {
 			continue
 		}
-		if pekerja.TanggalBerhenti != nil && tanggalSaja(*pekerja.TanggalBerhenti).Before(mulai) {
+		if pekerja.TanggalBerhenti != nil && tanggalSebelum(*pekerja.TanggalBerhenti, mulai) {
 			continue
 		}
 		hasil = append(hasil, pekerja)
@@ -407,6 +407,25 @@ func TestUbahPekerjaBolehMengubahTanggalMulaiTanpaRiwayat(t *testing.T) {
 	}
 	if !samaTanggal(repo.pekerja[lama.ID].TanggalMulai, tanggal(2026, time.November, 1)) {
 		t.Fatalf("tanggal mulai = %v, ingin 2026-11-01", repo.pekerja[lama.ID].TanggalMulai)
+	}
+}
+
+func TestUbahTanggalMulaiSamaWalauBedaZona(t *testing.T) {
+	repo := newFakeRepository()
+	lama := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+	if err := repo.SimpanUpah(context.Background(), &domain.Upah{
+		PekerjaID: lama.ID, Nominal: 100000, BerlakuMulai: tanggal(2026, time.November, 2),
+	}); err != nil {
+		t.Fatalf("gagal menyiapkan upah: %v", err)
+	}
+	svc := NewService(repo)
+
+	lama.TanggalMulai = time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
+	if err := svc.UbahPekerja(context.Background(), lama); err != nil {
+		t.Fatalf("tanggal kalender yang sama tidak boleh dianggap berubah: %v", err)
 	}
 }
 

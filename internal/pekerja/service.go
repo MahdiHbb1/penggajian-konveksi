@@ -167,7 +167,7 @@ func (s *Service) NonaktifkanPekerja(ctx context.Context, id int64, tanggalBerhe
 		return salahInput("Tanggal berhenti wajib diisi.")
 	}
 	tanggalBerhenti = tanggalSaja(tanggalBerhenti)
-	if tanggalBerhenti.Before(tanggalSaja(lama.TanggalMulai)) {
+	if tanggalSebelum(tanggalBerhenti, lama.TanggalMulai) {
 		return salahInput("Tanggal berhenti tidak boleh sebelum tanggal mulai.")
 	}
 	return s.repo.NonaktifkanPekerja(ctx, id, tanggalBerhenti)
@@ -225,7 +225,7 @@ func (s *Service) TambahRiwayatUpah(ctx context.Context, upah domain.Upah) error
 	if err != nil {
 		return err
 	}
-	if upah.BerlakuMulai.Before(tanggalSaja(pekerja.TanggalMulai)) {
+	if tanggalSebelum(upah.BerlakuMulai, pekerja.TanggalMulai) {
 		return salahInput("Tanggal berlaku upah tidak boleh sebelum pekerja mulai bekerja.")
 	}
 
@@ -287,7 +287,7 @@ func (s *Service) DaftarPekerjaAktif(ctx context.Context, jenis domain.JenisPeke
 	}
 	mulai = tanggalSaja(mulai)
 	selesai = tanggalSaja(selesai)
-	if mulai.After(selesai) {
+	if tanggalSetelah(mulai, selesai) {
 		return nil, salahInput("Rentang tanggal periode tidak valid.")
 	}
 	if jenis != "" && jenis != domain.PekerjaHarian && jenis != domain.PekerjaBulanan {
@@ -326,7 +326,7 @@ func validasiPekerja(pekerja domain.Pekerja) error {
 		return salahInput("Tanggal mulai kerja wajib diisi.")
 	}
 	if pekerja.TanggalBerhenti != nil &&
-		tanggalSaja(*pekerja.TanggalBerhenti).Before(tanggalSaja(pekerja.TanggalMulai)) {
+		tanggalSebelum(*pekerja.TanggalBerhenti, pekerja.TanggalMulai) {
 		return salahInput("Tanggal berhenti tidak boleh sebelum tanggal mulai.")
 	}
 	return nil
@@ -341,7 +341,39 @@ func tanggalSaja(t time.Time) time.Time {
 }
 
 func samaTanggal(a, b time.Time) bool {
-	return tanggalSaja(a).Equal(tanggalSaja(b))
+	return bandingTanggal(a, b) == 0
+}
+
+func tanggalSebelum(a, b time.Time) bool {
+	return bandingTanggal(a, b) < 0
+}
+
+func tanggalSetelah(a, b time.Time) bool {
+	return bandingTanggal(a, b) > 0
+}
+
+// bandingTanggal membandingkan komponen tanggal saja tanpa pengaruh zona waktu.
+func bandingTanggal(a, b time.Time) int {
+	tahunA, bulanA, hariA := a.Date()
+	tahunB, bulanB, hariB := b.Date()
+	switch {
+	case tahunA != tahunB:
+		if tahunA < tahunB {
+			return -1
+		}
+		return 1
+	case bulanA != bulanB:
+		if bulanA < bulanB {
+			return -1
+		}
+		return 1
+	case hariA != hariB:
+		if hariA < hariB {
+			return -1
+		}
+		return 1
+	}
+	return 0
 }
 
 // Pastikan Service memenuhi kontrak lintas modul.

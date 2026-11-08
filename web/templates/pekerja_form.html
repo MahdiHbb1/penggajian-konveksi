@@ -21,7 +21,7 @@
     </fieldset>
     <label>Tanggal mulai kerja
       <input type="date" name="tanggal_mulai" required {{if not .Isi.Baru}}readonly{{end}} value="{{.Isi.TanggalMulai}}">
-      {{if not .Isi.Baru}}<span class="ket">Tanggal mulai tidak dapat diubah setelah pekerja memiliki riwayat upah.</span>{{end}}
+      {{if not .Isi.Baru}}<span class="ket">Tanggal mulai tidak dapat diubah lewat halaman ini.</span>{{end}}
     </label>
     {{if .Isi.Baru}}
     <label>Upah awal (rupiah)
