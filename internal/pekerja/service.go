@@ -172,7 +172,37 @@ func (s *Service) CariPekerja(ctx context.Context, id int64) (domain.Pekerja, er
 // Tabel: riwayat_upah, periode_gaji.
 // Memanggil: Repositori.CariPekerja, Repositori.UpahPadaTanggal, Repositori.SimpanUpah.
 func (s *Service) TambahRiwayatUpah(ctx context.Context, upah domain.Upah) error {
-	return domain.ErrBelumDiimplementasi
+	if upah.PekerjaID <= 0 {
+		return errors.New("Pekerja wajib dipilih.")
+	}
+	if upah.Nominal <= 0 {
+		return errors.New("Nominal upah harus lebih dari 0.")
+	}
+	if upah.BerlakuMulai.IsZero() {
+		return errors.New("Tanggal berlaku upah wajib diisi.")
+	}
+	upah.BerlakuMulai = tanggalSaja(upah.BerlakuMulai)
+	upah.Alasan = strings.TrimSpace(upah.Alasan)
+	if utf8.RuneCountInString(upah.Alasan) > 100 {
+		return errors.New("Alasan perubahan upah maksimal 100 karakter.")
+	}
+
+	pekerja, err := s.repo.CariPekerja(ctx, upah.PekerjaID)
+	if err != nil {
+		return err
+	}
+	if upah.BerlakuMulai.Before(tanggalSaja(pekerja.TanggalMulai)) {
+		return errors.New("Tanggal berlaku upah tidak boleh sebelum pekerja mulai bekerja.")
+	}
+
+	sudahAda, err := s.repo.UpahPadaTanggal(ctx, upah.PekerjaID, upah.BerlakuMulai)
+	if err != nil {
+		return err
+	}
+	if sudahAda {
+		return errors.New("Sudah ada upah dengan tanggal berlaku yang sama.")
+	}
+	return s.repo.SimpanUpah(ctx, &upah)
 }
 
 // DaftarRiwayatUpah mengambil riwayat upah pekerja.
@@ -183,7 +213,10 @@ func (s *Service) TambahRiwayatUpah(ctx context.Context, upah domain.Upah) error
 // Tabel: riwayat_upah.
 // Memanggil: Repositori.DaftarUpah.
 func (s *Service) DaftarRiwayatUpah(ctx context.Context, pekerjaID int64) ([]domain.Upah, error) {
-	return nil, domain.ErrBelumDiimplementasi
+	if pekerjaID <= 0 {
+		return nil, errors.New("ID pekerja tidak valid.")
+	}
+	return s.repo.DaftarUpah(ctx, pekerjaID)
 }
 
 // CariUpahBerlaku menghasilkan nominal upah pada tanggal kerja.
@@ -194,7 +227,17 @@ func (s *Service) DaftarRiwayatUpah(ctx context.Context, pekerjaID int64) ([]dom
 // Tabel: riwayat_upah.
 // Memanggil: Repositori.UpahBerlaku.
 func (s *Service) CariUpahBerlaku(ctx context.Context, pekerjaID int64, tanggal time.Time) (domain.Rupiah, error) {
-	return 0, domain.ErrBelumDiimplementasi
+	if pekerjaID <= 0 {
+		return 0, errors.New("ID pekerja tidak valid.")
+	}
+	if tanggal.IsZero() {
+		return 0, errors.New("Tanggal kerja wajib diisi.")
+	}
+	upah, err := s.repo.UpahBerlaku(ctx, pekerjaID, tanggalSaja(tanggal))
+	if err != nil {
+		return 0, err
+	}
+	return upah.Nominal, nil
 }
 
 // DaftarPekerjaAktif menghasilkan pekerja aktif pada rentang periode.
@@ -205,7 +248,18 @@ func (s *Service) CariUpahBerlaku(ctx context.Context, pekerjaID int64, tanggal 
 // Tabel: pekerja, riwayat_upah.
 // Memanggil: Repositori.PekerjaAktif.
 func (s *Service) DaftarPekerjaAktif(ctx context.Context, jenis domain.JenisPekerja, mulai, selesai time.Time) ([]domain.Pekerja, error) {
-	return nil, domain.ErrBelumDiimplementasi
+	if mulai.IsZero() || selesai.IsZero() {
+		return nil, errors.New("Rentang tanggal periode wajib diisi.")
+	}
+	mulai = tanggalSaja(mulai)
+	selesai = tanggalSaja(selesai)
+	if mulai.After(selesai) {
+		return nil, errors.New("Rentang tanggal periode tidak valid.")
+	}
+	if jenis != "" && jenis != domain.PekerjaHarian && jenis != domain.PekerjaBulanan {
+		return nil, errors.New("Jenis pekerja harus Harian atau Bulanan.")
+	}
+	return s.repo.PekerjaAktif(ctx, jenis, mulai, selesai)
 }
 
 func normalisasiPekerja(pekerja *domain.Pekerja) {

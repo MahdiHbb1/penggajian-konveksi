@@ -430,9 +430,259 @@ func TestCariPekerjaTidakDitemukan(t *testing.T) {
 }
 
 func TestRiwayatUpahTanggalGanda(t *testing.T) {
-	t.Skip("belum diimplementasi: TambahRiwayatUpah")
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+	if err := repo.SimpanUpah(context.Background(), &domain.Upah{
+		PekerjaID: pekerja.ID, Nominal: 100000, BerlakuMulai: tanggal(2026, time.November, 2),
+	}); err != nil {
+		t.Fatalf("gagal menyiapkan upah: %v", err)
+	}
+	svc := NewService(repo)
+
+	err := svc.TambahRiwayatUpah(context.Background(), domain.Upah{
+		PekerjaID: pekerja.ID, Nominal: 120000, BerlakuMulai: tanggal(2026, time.November, 2),
+	})
+	if err == nil || err.Error() != "Sudah ada upah dengan tanggal berlaku yang sama." {
+		t.Fatalf("galat = %v, ingin \"Sudah ada upah dengan tanggal berlaku yang sama.\"", err)
+	}
 }
 
 func TestTambahRiwayatUpahSebelumMulai(t *testing.T) {
-	t.Skip("belum diimplementasi: TambahRiwayatUpah")
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 10), Aktif: true,
+	})
+	svc := NewService(repo)
+
+	err := svc.TambahRiwayatUpah(context.Background(), domain.Upah{
+		PekerjaID: pekerja.ID, Nominal: 120000, BerlakuMulai: tanggal(2026, time.November, 1),
+	})
+	if err == nil || err.Error() != "Tanggal berlaku upah tidak boleh sebelum pekerja mulai bekerja." {
+		t.Fatalf("galat = %v, ingin penolakan tanggal sebelum mulai bekerja", err)
+	}
+}
+
+func TestTambahRiwayatUpahValid(t *testing.T) {
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+	svc := NewService(repo)
+
+	err := svc.TambahRiwayatUpah(context.Background(), domain.Upah{
+		PekerjaID: pekerja.ID, Nominal: 120000,
+		BerlakuMulai: tanggal(2026, time.November, 5), Alasan: "  Kenaikan upah  ",
+	})
+	if err != nil {
+		t.Fatalf("TambahRiwayatUpah gagal: %v", err)
+	}
+	riwayat := repo.upah[pekerja.ID]
+	if len(riwayat) != 1 {
+		t.Fatalf("jumlah riwayat = %d, ingin 1", len(riwayat))
+	}
+	if riwayat[0].Nominal != 120000 {
+		t.Fatalf("nominal = %d, ingin 120000", riwayat[0].Nominal)
+	}
+	if riwayat[0].Alasan != "Kenaikan upah" {
+		t.Fatalf("alasan = %q, ingin %q", riwayat[0].Alasan, "Kenaikan upah")
+	}
+}
+
+func TestTambahRiwayatUpahNominalTidakValid(t *testing.T) {
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+	svc := NewService(repo)
+
+	err := svc.TambahRiwayatUpah(context.Background(), domain.Upah{
+		PekerjaID: pekerja.ID, Nominal: 0, BerlakuMulai: tanggal(2026, time.November, 5),
+	})
+	if err == nil || err.Error() != "Nominal upah harus lebih dari 0." {
+		t.Fatalf("galat = %v, ingin penolakan nominal nol", err)
+	}
+}
+
+func TestTambahRiwayatUpahPekerjaTidakAda(t *testing.T) {
+	svc := NewService(newFakeRepository())
+	err := svc.TambahRiwayatUpah(context.Background(), domain.Upah{
+		PekerjaID: 99, Nominal: 120000, BerlakuMulai: tanggal(2026, time.November, 5),
+	})
+	if !errors.Is(err, domain.ErrTidakDitemukan) {
+		t.Fatalf("galat = %v, ingin domain.ErrTidakDitemukan", err)
+	}
+}
+
+func TestCariUpahBerlakuMemilihTerbaru(t *testing.T) {
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 1), Aktif: true,
+	})
+	for _, upah := range []domain.Upah{
+		{PekerjaID: pekerja.ID, Nominal: 100000, BerlakuMulai: tanggal(2026, time.November, 1)},
+		{PekerjaID: pekerja.ID, Nominal: 120000, BerlakuMulai: tanggal(2026, time.November, 5)},
+	} {
+		if err := repo.SimpanUpah(context.Background(), &upah); err != nil {
+			t.Fatalf("gagal menyiapkan upah: %v", err)
+		}
+	}
+	svc := NewService(repo)
+
+	kasus := []struct {
+		tanggal time.Time
+		ingin   domain.Rupiah
+	}{
+		{tanggal(2026, time.November, 1), 100000},
+		{tanggal(2026, time.November, 4), 100000},
+		{tanggal(2026, time.November, 5), 120000},
+		{tanggal(2026, time.November, 6), 120000},
+	}
+	for _, k := range kasus {
+		nominal, err := svc.CariUpahBerlaku(context.Background(), pekerja.ID, k.tanggal)
+		if err != nil {
+			t.Fatalf("CariUpahBerlaku(%v) gagal: %v", k.tanggal, err)
+		}
+		if nominal != k.ingin {
+			t.Fatalf("CariUpahBerlaku(%v) = %d, ingin %d", k.tanggal, nominal, k.ingin)
+		}
+	}
+}
+
+func TestCariUpahBerlakuSebelumRiwayatPertama(t *testing.T) {
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 1), Aktif: true,
+	})
+	if err := repo.SimpanUpah(context.Background(), &domain.Upah{
+		PekerjaID: pekerja.ID, Nominal: 100000, BerlakuMulai: tanggal(2026, time.November, 2),
+	}); err != nil {
+		t.Fatalf("gagal menyiapkan upah: %v", err)
+	}
+	svc := NewService(repo)
+
+	_, err := svc.CariUpahBerlaku(context.Background(), pekerja.ID, tanggal(2026, time.November, 1))
+	if !errors.Is(err, domain.ErrTidakDitemukan) {
+		t.Fatalf("galat = %v, ingin domain.ErrTidakDitemukan", err)
+	}
+}
+
+func TestCariUpahBerlakuMengabaikanJam(t *testing.T) {
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 1), Aktif: true,
+	})
+	if err := repo.SimpanUpah(context.Background(), &domain.Upah{
+		PekerjaID: pekerja.ID, Nominal: 100000,
+		BerlakuMulai: time.Date(2026, time.November, 2, 12, 30, 0, 0, time.Local),
+	}); err != nil {
+		t.Fatalf("gagal menyiapkan upah: %v", err)
+	}
+	svc := NewService(repo)
+
+	nominal, err := svc.CariUpahBerlaku(context.Background(), pekerja.ID,
+		time.Date(2026, time.November, 2, 23, 59, 0, 0, time.Local))
+	if err != nil {
+		t.Fatalf("CariUpahBerlaku gagal: %v", err)
+	}
+	if nominal != 100000 {
+		t.Fatalf("nominal = %d, ingin 100000", nominal)
+	}
+}
+
+func TestCariUpahBerlakuPekerjaTanpaRiwayat(t *testing.T) {
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 1), Aktif: true,
+	})
+	svc := NewService(repo)
+
+	_, err := svc.CariUpahBerlaku(context.Background(), pekerja.ID, tanggal(2026, time.November, 2))
+	if !errors.Is(err, domain.ErrTidakDitemukan) {
+		t.Fatalf("galat = %v, ingin domain.ErrTidakDitemukan", err)
+	}
+}
+
+func TestDaftarPekerjaAktifMenghormatiRentangDanJenis(t *testing.T) {
+	repo := newFakeRepository()
+	berhentiB := tanggal(2026, time.November, 10)
+	berhentiC := tanggal(2026, time.September, 30)
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "A", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 1), Aktif: true,
+	})
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-002", Nama: "B", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 1), TanggalBerhenti: &berhentiB, Aktif: false,
+	})
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-003", Nama: "C", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.September, 1), TanggalBerhenti: &berhentiC, Aktif: false,
+	})
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-004", Nama: "D", Jenis: domain.PekerjaBulanan,
+		TanggalMulai: tanggal(2026, time.November, 1), Aktif: true,
+	})
+	svc := NewService(repo)
+
+	hasil, err := svc.DaftarPekerjaAktif(context.Background(), domain.PekerjaHarian,
+		tanggal(2026, time.November, 10), tanggal(2026, time.November, 16))
+	if err != nil {
+		t.Fatalf("DaftarPekerjaAktif gagal: %v", err)
+	}
+	if len(hasil) != 2 || hasil[0].Kode != "P-001" || hasil[1].Kode != "P-002" {
+		t.Fatalf("hasil = %+v, ingin P-001 dan P-002", hasil)
+	}
+
+	semua, err := svc.DaftarPekerjaAktif(context.Background(), "",
+		tanggal(2026, time.November, 10), tanggal(2026, time.November, 16))
+	if err != nil {
+		t.Fatalf("DaftarPekerjaAktif semua jenis gagal: %v", err)
+	}
+	if len(semua) != 3 {
+		t.Fatalf("jumlah semua jenis = %d, ingin 3", len(semua))
+	}
+}
+
+func TestDaftarPekerjaAktifRentangTidakValid(t *testing.T) {
+	svc := NewService(newFakeRepository())
+	_, err := svc.DaftarPekerjaAktif(context.Background(), domain.PekerjaHarian,
+		tanggal(2026, time.November, 16), tanggal(2026, time.November, 10))
+	if err == nil || err.Error() != "Rentang tanggal periode tidak valid." {
+		t.Fatalf("galat = %v, ingin penolakan rentang terbalik", err)
+	}
+}
+
+func TestDaftarRiwayatUpahTerurut(t *testing.T) {
+	repo := newFakeRepository()
+	pekerja := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 1), Aktif: true,
+	})
+	for _, upah := range []domain.Upah{
+		{PekerjaID: pekerja.ID, Nominal: 100000, BerlakuMulai: tanggal(2026, time.November, 2)},
+		{PekerjaID: pekerja.ID, Nominal: 120000, BerlakuMulai: tanggal(2026, time.November, 5)},
+	} {
+		if err := repo.SimpanUpah(context.Background(), &upah); err != nil {
+			t.Fatalf("gagal menyiapkan upah: %v", err)
+		}
+	}
+	svc := NewService(repo)
+
+	riwayat, err := svc.DaftarRiwayatUpah(context.Background(), pekerja.ID)
+	if err != nil {
+		t.Fatalf("DaftarRiwayatUpah gagal: %v", err)
+	}
+	if len(riwayat) != 2 || riwayat[0].Nominal != 120000 {
+		t.Fatalf("riwayat = %+v, ingin upah terbaru lebih dulu", riwayat)
+	}
 }
