@@ -6,9 +6,15 @@ import (
 	"time"
 )
 
-// ErrBelumDiimplementasi dipakai seluruh badan fungsi kerangka.
-// Isi fungsi anggota diganti oleh pemilik modul masing-masing.
-var ErrBelumDiimplementasi = errors.New("belum diimplementasi")
+var (
+	// ErrBelumDiimplementasi dipakai seluruh badan fungsi kerangka.
+	// Isi fungsi anggota diganti oleh pemilik modul masing-masing.
+	ErrBelumDiimplementasi = errors.New("belum diimplementasi")
+	// ErrTidakDitemukan dipakai bila data yang diminta tidak ada.
+	ErrTidakDitemukan = errors.New("data tidak ditemukan")
+	// ErrDuplikat dipakai bila data unik sudah dipakai.
+	ErrDuplikat = errors.New("data sudah ada")
+)
 
 // Rupiah adalah nominal uang dalam bilangan bulat rupiah.
 // Jangan memakai float64 untuk uang.

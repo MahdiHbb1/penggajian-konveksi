@@ -124,3 +124,36 @@ func (r *Repository) UpahBerlaku(ctx context.Context, pekerjaID int64, tanggal t
 func (r *Repository) PekerjaAktif(ctx context.Context, jenis domain.JenisPekerja, mulai, selesai time.Time) ([]domain.Pekerja, error) {
 	return nil, domain.ErrBelumDiimplementasi
 }
+
+// SimpanPekerjaDanUpah menyimpan pekerja dan upah pertamanya dalam satu transaksi.
+//
+// Masukan: context, pointer Pekerja, pointer Upah.
+// Hasil: error; ID pekerja dan upah diisi ke pointer.
+// Aturan: 8, 11, 16.
+// Tabel: pekerja, riwayat_upah.
+// Memanggil: database/sql BeginTx, SimpanPekerja, SimpanUpah, Commit.
+func (r *Repository) SimpanPekerjaDanUpah(ctx context.Context, pekerja *domain.Pekerja, upah *domain.Upah) error {
+	return domain.ErrBelumDiimplementasi
+}
+
+// KodeSudahDipakai memeriksa apakah kode pekerja sudah dipakai pekerja lain.
+//
+// Masukan: context, kode, dan ID pekerja yang dikecualikan (0 saat tambah).
+// Hasil: true bila kode sudah dipakai.
+// Aturan: 11.
+// Tabel: pekerja.
+// Memanggil: database/sql QueryRowContext.
+func (r *Repository) KodeSudahDipakai(ctx context.Context, kode string, kecualiID int64) (bool, error) {
+	return false, domain.ErrBelumDiimplementasi
+}
+
+// UpahPadaTanggal memeriksa apakah sudah ada upah pada tanggal berlaku tertentu.
+//
+// Masukan: context, ID pekerja, tanggal berlaku.
+// Hasil: true bila sudah ada.
+// Aturan: 8.
+// Tabel: riwayat_upah.
+// Memanggil: database/sql QueryRowContext.
+func (r *Repository) UpahPadaTanggal(ctx context.Context, pekerjaID int64, tanggal time.Time) (bool, error) {
+	return false, domain.ErrBelumDiimplementasi
+}
