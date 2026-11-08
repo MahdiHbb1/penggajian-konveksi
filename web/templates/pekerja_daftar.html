@@ -49,7 +49,7 @@
             <a class="btn btn-kecil btn-sekunder" href="/pekerja/{{.ID}}/upah">Upah</a>
             {{if .Aktif}}
             <form method="post" action="/pekerja/{{.ID}}/nonaktif" style="display:inline-flex; gap:6px; margin-left:6px; vertical-align:middle;">
-              <input type="date" name="tanggal_berhenti" required style="min-height:36px; width:auto;">
+              <input type="date" name="tanggal_berhenti" aria-label="Tanggal berhenti {{.Nama}}" style="min-height:36px; width:auto;">
               <button class="btn btn-kecil btn-bahaya" type="submit">Nonaktifkan</button>
             </form>
             {{end}}

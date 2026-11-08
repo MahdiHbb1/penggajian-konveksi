@@ -2,6 +2,7 @@
 package pekerja
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -282,6 +283,93 @@ func TestHalamanRiwayatUpahPekerjaTidakAda(t *testing.T) {
 	hasil := minta(mux, "/pekerja/99/upah")
 	if hasil.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, ingin 404", hasil.Code)
+	}
+}
+
+func TestHalamanFormUbahIDTidakValid(t *testing.T) {
+	mux, _ := newTestMux(t)
+	hasil := minta(mux, "/pekerja/abc/ubah")
+	if hasil.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, ingin 404", hasil.Code)
+	}
+}
+
+func TestSimpanUbahKodeSudahDipakai(t *testing.T) {
+	mux, repo := newTestMux(t)
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-002", Nama: "Siti", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 3), Aktif: true,
+	})
+
+	hasil := kirimForm(mux, "/pekerja/2/ubah", url.Values{
+		"kode":          {"P-001"},
+		"nama":          {"Siti"},
+		"tanggal_mulai": {"2026-11-03"},
+	})
+	if hasil.Code != http.StatusOK {
+		t.Fatalf("status = %d, ingin 200", hasil.Code)
+	}
+	if !strings.Contains(hasil.Body.String(), "Kode pekerja sudah dipakai.") {
+		t.Fatalf("galat kode duplikat tidak tampil; body: %s", hasil.Body.String())
+	}
+}
+
+func TestSimpanUpahNominalBukanAngka(t *testing.T) {
+	mux, repo := newTestMux(t)
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+
+	hasil := kirimForm(mux, "/pekerja/1/upah", url.Values{
+		"nominal":       {"1.2.3"},
+		"berlaku_mulai": {"2026-11-05"},
+	})
+	if hasil.Code != http.StatusOK {
+		t.Fatalf("status = %d, ingin 200", hasil.Code)
+	}
+	if !strings.Contains(hasil.Body.String(), "Nominal upah harus berupa angka.") {
+		t.Fatalf("galat nominal tidak tampil; body: %s", hasil.Body.String())
+	}
+}
+
+func TestSimpanUpahTanggalTidakValid(t *testing.T) {
+	mux, repo := newTestMux(t)
+	seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+
+	hasil := kirimForm(mux, "/pekerja/1/upah", url.Values{
+		"nominal":       {"120000"},
+		"berlaku_mulai": {"2026-13-40"},
+	})
+	if hasil.Code != http.StatusOK {
+		t.Fatalf("status = %d, ingin 200", hasil.Code)
+	}
+	if !strings.Contains(hasil.Body.String(), "Format tanggal tidak valid.") {
+		t.Fatalf("galat tanggal tidak tampil; body: %s", hasil.Body.String())
+	}
+}
+
+func TestGalatDatabaseMenjadi500TanpaMembocorkanDetail(t *testing.T) {
+	mux, repo := newTestMux(t)
+	repo.err = errors.New("dial tcp 127.0.0.1:3306: koneksi ditolak")
+
+	hasil := minta(mux, "/pekerja")
+	if hasil.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, ingin 500", hasil.Code)
+	}
+	body := hasil.Body.String()
+	if strings.Contains(body, "koneksi ditolak") {
+		t.Fatal("detail galat server bocor ke pengguna")
+	}
+	if !strings.Contains(body, "Terjadi kesalahan pada server.") {
+		t.Fatalf("pesan galat umum tidak tampil; body: %s", body)
 	}
 }
 

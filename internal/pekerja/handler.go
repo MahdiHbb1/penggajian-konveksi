@@ -4,8 +4,10 @@ package pekerja
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +18,10 @@ import (
 
 const layoutTanggalInput = "2006-01-02"
 
-var namaBulanPendek = [...]string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
+var (
+	namaBulanPendek = [...]string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
+	polaNominal     = regexp.MustCompile(`^(\d{1,3}(\.\d{3})*|\d+)$`)
+)
 
 // BarisPekerja adalah satu baris tabel daftar pekerja.
 type BarisPekerja struct {
@@ -131,7 +136,10 @@ func (h *Handler) SimpanBaru(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.service.TambahPekerja(r.Context(), pekerja, upahAwal); err != nil {
-		h.renderForm(w, r, formDariMasukan(pekerja, upahAwal, true), err.Error())
+		view := formDariMasukan(pekerja, upahAwal, true)
+		h.tanganiGalat(w, r, err, func(pesan string) {
+			h.renderForm(w, r, view, pesan)
+		})
 		return
 	}
 
@@ -145,9 +153,8 @@ func (h *Handler) FormUbah(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	pekerja, err := h.service.CariPekerja(r.Context(), id)
-	if err != nil {
-		http.NotFound(w, r)
+	pekerja, ok := h.ambilPekerja(w, r, id)
+	if !ok {
 		return
 	}
 
@@ -161,9 +168,8 @@ func (h *Handler) SimpanUbah(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	lama, err := h.service.CariPekerja(r.Context(), id)
-	if err != nil {
-		http.NotFound(w, r)
+	lama, ok := h.ambilPekerja(w, r, id)
+	if !ok {
 		return
 	}
 
@@ -192,11 +198,14 @@ func (h *Handler) SimpanUbah(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.UbahPekerja(r.Context(), pekerja); err != nil {
-		h.renderForm(w, r, formDariMasukan(pekerja, 0, false), err.Error())
+		view := formDariMasukan(pekerja, 0, false)
+		h.tanganiGalat(w, r, err, func(pesan string) {
+			h.renderForm(w, r, view, pesan)
+		})
 		return
 	}
 
-	h.redirectInfo(w, r, "/pekerja", fmt.Sprintf("Pekerja %s berhasil diperbarui.", pekerja.Kode))
+	h.redirectInfo(w, r, "/pekerja", fmt.Sprintf("Pekerja %s berhasil diperbarui.", strings.TrimSpace(pekerja.Kode)))
 }
 
 // Nonaktifkan menonaktifkan pekerja tanpa menghapus datanya.
@@ -217,7 +226,9 @@ func (h *Handler) Nonaktifkan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.NonaktifkanPekerja(r.Context(), id, tanggal); err != nil {
-		h.renderDaftar(w, r, Filter{}, err.Error())
+		h.tanganiGalat(w, r, err, func(pesan string) {
+			h.renderDaftar(w, r, Filter{}, pesan)
+		})
 		return
 	}
 
@@ -231,15 +242,16 @@ func (h *Handler) RiwayatUpah(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	pekerja, err := h.service.CariPekerja(r.Context(), id)
-	if err != nil {
-		http.NotFound(w, r)
+	pekerja, ok := h.ambilPekerja(w, r, id)
+	if !ok {
 		return
 	}
 
 	riwayat, err := h.service.DaftarRiwayatUpah(r.Context(), id)
 	if err != nil {
-		h.renderUpah(w, r, buatUpahView(pekerja, nil), err.Error())
+		h.tanganiGalat(w, r, err, func(pesan string) {
+			h.renderUpah(w, r, buatUpahView(pekerja, nil), pesan)
+		})
 		return
 	}
 	h.renderUpah(w, r, buatUpahView(pekerja, riwayat), "")
@@ -252,16 +264,16 @@ func (h *Handler) SimpanUpah(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	pekerja, err := h.service.CariPekerja(r.Context(), id)
-	if err != nil {
-		http.NotFound(w, r)
+	pekerja, ok := h.ambilPekerja(w, r, id)
+	if !ok {
 		return
 	}
 
 	nominal, errNominal := parseNominalInput(r.PostFormValue("nominal"))
 	berlaku, errTanggal := parseTanggalInput(r.PostFormValue("berlaku_mulai"))
 	if errNominal != nil || errTanggal != nil {
-		view := buatUpahView(pekerja, nil)
+		riwayat, _ := h.service.DaftarRiwayatUpah(r.Context(), id)
+		view := buatUpahView(pekerja, riwayat)
 		view.Nominal = nominal
 		view.BerlakuMulai = strings.TrimSpace(r.PostFormValue("berlaku_mulai"))
 		view.Alasan = strings.TrimSpace(r.PostFormValue("alasan"))
@@ -285,7 +297,9 @@ func (h *Handler) SimpanUpah(w http.ResponseWriter, r *http.Request) {
 		view.Nominal = nominal
 		view.BerlakuMulai = strings.TrimSpace(r.PostFormValue("berlaku_mulai"))
 		view.Alasan = strings.TrimSpace(r.PostFormValue("alasan"))
-		h.renderUpah(w, r, view, err.Error())
+		h.tanganiGalat(w, r, err, func(pesan string) {
+			h.renderUpah(w, r, view, pesan)
+		})
 		return
 	}
 
@@ -294,8 +308,9 @@ func (h *Handler) SimpanUpah(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) renderDaftar(w http.ResponseWriter, r *http.Request, filter Filter, galat string) {
 	pekerja, err := h.service.DaftarPekerja(r.Context(), filter)
-	if err != nil && galat == "" {
-		galat = err.Error()
+	if err != nil {
+		h.tanganiGalat(w, r, err, nil)
+		return
 	}
 
 	view := DaftarView{Cari: strings.TrimSpace(filter.Cari), Jenis: filter.Jenis}
@@ -348,6 +363,33 @@ func (h *Handler) renderUpah(w http.ResponseWriter, r *http.Request, view UpahVi
 		Info:  r.URL.Query().Get("info"),
 		Isi:   view,
 	})
+}
+
+func (h *Handler) ambilPekerja(w http.ResponseWriter, r *http.Request, id int64) (domain.Pekerja, bool) {
+	pekerja, err := h.service.CariPekerja(r.Context(), id)
+	if err != nil {
+		h.tanganiGalat(w, r, err, nil)
+		return domain.Pekerja{}, false
+	}
+	return pekerja, true
+}
+
+func (h *Handler) tanganiGalat(w http.ResponseWriter, r *http.Request, err error, render func(pesan string)) {
+	if errors.Is(err, domain.ErrTidakDitemukan) {
+		http.NotFound(w, r)
+		return
+	}
+	if pesan, ok := pesanGalatValidasi(err); ok {
+		if render != nil {
+			render(pesan)
+			return
+		}
+		http.Error(w, pesan, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("GALAT pekerja %s %s: %v", r.Method, r.URL.RequestURI(), err)
+	http.Error(w, "Terjadi kesalahan pada server.", http.StatusInternalServerError)
 }
 
 func (h *Handler) redirectInfo(w http.ResponseWriter, r *http.Request, path, pesan string) {
@@ -427,11 +469,14 @@ func idDariPath(r *http.Request) (int64, error) {
 }
 
 func parseNominalInput(teks string) (domain.Rupiah, error) {
-	bersih := strings.ReplaceAll(strings.TrimSpace(teks), ".", "")
-	bersih = strings.ReplaceAll(bersih, " ", "")
-	if bersih == "" {
+	teks = strings.TrimSpace(teks)
+	if teks == "" {
 		return 0, nil
 	}
+	if !polaNominal.MatchString(teks) {
+		return 0, errors.New("Nominal upah harus berupa angka.")
+	}
+	bersih := strings.ReplaceAll(teks, ".", "")
 	nilai, err := strconv.ParseInt(bersih, 10, 64)
 	if err != nil {
 		return 0, errors.New("Nominal upah harus berupa angka.")

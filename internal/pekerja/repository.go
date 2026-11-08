@@ -479,7 +479,7 @@ func nullableTeks(teks string) any {
 func terjemahkanDuplikat(err error, pesan string) error {
 	var galatMySQL *mysql.MySQLError
 	if errors.As(err, &galatMySQL) && galatMySQL.Number == 1062 {
-		return errors.New(pesan)
+		return salahInput(pesan)
 	}
 	return err
 }

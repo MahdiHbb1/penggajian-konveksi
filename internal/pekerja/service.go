@@ -33,6 +33,28 @@ type Service struct {
 	repo Repositori
 }
 
+// GalatValidasi menandai kesalahan masukan pengguna yang aman ditampilkan.
+type GalatValidasi struct {
+	Pesan string
+}
+
+// Error mengembalikan pesan validasi.
+func (g GalatValidasi) Error() string {
+	return g.Pesan
+}
+
+func salahInput(pesan string) error {
+	return GalatValidasi{Pesan: pesan}
+}
+
+func pesanGalatValidasi(err error) (string, bool) {
+	var galat GalatValidasi
+	if errors.As(err, &galat) {
+		return galat.Pesan, true
+	}
+	return "", false
+}
+
 // NewService membuat service pekerja.
 func NewService(repo Repositori) *Service {
 	return &Service{repo: repo}
@@ -50,8 +72,11 @@ func (s *Service) TambahPekerja(ctx context.Context, pekerja domain.Pekerja, upa
 	if err := validasiPekerja(pekerja); err != nil {
 		return 0, err
 	}
+	if pekerja.TanggalBerhenti != nil {
+		return 0, salahInput("Pekerja baru tidak boleh memiliki tanggal berhenti.")
+	}
 	if upahAwal <= 0 {
-		return 0, errors.New("Nominal upah harus lebih dari 0.")
+		return 0, salahInput("Nominal upah harus lebih dari 0.")
 	}
 
 	dipakai, err := s.repo.KodeSudahDipakai(ctx, pekerja.Kode, 0)
@@ -59,7 +84,7 @@ func (s *Service) TambahPekerja(ctx context.Context, pekerja domain.Pekerja, upa
 		return 0, err
 	}
 	if dipakai {
-		return 0, errors.New("Kode pekerja sudah dipakai.")
+		return 0, salahInput("Kode pekerja sudah dipakai.")
 	}
 
 	pekerja.Aktif = true
@@ -83,7 +108,7 @@ func (s *Service) TambahPekerja(ctx context.Context, pekerja domain.Pekerja, upa
 // Memanggil: Repositori.CariPekerja, Repositori.KodeSudahDipakai, Repositori.UbahPekerja.
 func (s *Service) UbahPekerja(ctx context.Context, pekerja domain.Pekerja) error {
 	if pekerja.ID <= 0 {
-		return errors.New("ID pekerja tidak valid.")
+		return salahInput("ID pekerja tidak valid.")
 	}
 	lama, err := s.repo.CariPekerja(ctx, pekerja.ID)
 	if err != nil {
@@ -95,7 +120,16 @@ func (s *Service) UbahPekerja(ctx context.Context, pekerja domain.Pekerja) error
 		return err
 	}
 	if pekerja.Jenis != lama.Jenis {
-		return errors.New("Jenis pekerja tidak dapat diubah setelah disimpan.")
+		return salahInput("Jenis pekerja tidak dapat diubah setelah disimpan.")
+	}
+	if !samaTanggal(pekerja.TanggalMulai, lama.TanggalMulai) {
+		riwayat, err := s.repo.DaftarUpah(ctx, pekerja.ID)
+		if err != nil {
+			return err
+		}
+		if len(riwayat) > 0 {
+			return salahInput("Tanggal mulai tidak dapat diubah karena sudah ada riwayat upah.")
+		}
 	}
 
 	dipakai, err := s.repo.KodeSudahDipakai(ctx, pekerja.Kode, pekerja.ID)
@@ -103,7 +137,7 @@ func (s *Service) UbahPekerja(ctx context.Context, pekerja domain.Pekerja) error
 		return err
 	}
 	if dipakai {
-		return errors.New("Kode pekerja sudah dipakai.")
+		return salahInput("Kode pekerja sudah dipakai.")
 	}
 
 	if pekerja.TanggalBerhenti != nil {
@@ -123,18 +157,18 @@ func (s *Service) UbahPekerja(ctx context.Context, pekerja domain.Pekerja) error
 // Memanggil: Repositori.CariPekerja, Repositori.NonaktifkanPekerja.
 func (s *Service) NonaktifkanPekerja(ctx context.Context, id int64, tanggalBerhenti time.Time) error {
 	if id <= 0 {
-		return errors.New("ID pekerja tidak valid.")
+		return salahInput("ID pekerja tidak valid.")
 	}
 	lama, err := s.repo.CariPekerja(ctx, id)
 	if err != nil {
 		return err
 	}
 	if tanggalBerhenti.IsZero() {
-		return errors.New("Tanggal berhenti wajib diisi.")
+		return salahInput("Tanggal berhenti wajib diisi.")
 	}
 	tanggalBerhenti = tanggalSaja(tanggalBerhenti)
 	if tanggalBerhenti.Before(tanggalSaja(lama.TanggalMulai)) {
-		return errors.New("Tanggal berhenti tidak boleh sebelum tanggal mulai.")
+		return salahInput("Tanggal berhenti tidak boleh sebelum tanggal mulai.")
 	}
 	return s.repo.NonaktifkanPekerja(ctx, id, tanggalBerhenti)
 }
@@ -159,7 +193,7 @@ func (s *Service) DaftarPekerja(ctx context.Context, filter Filter) ([]domain.Pe
 // Memanggil: Repositori.CariPekerja.
 func (s *Service) CariPekerja(ctx context.Context, id int64) (domain.Pekerja, error) {
 	if id <= 0 {
-		return domain.Pekerja{}, errors.New("ID pekerja tidak valid.")
+		return domain.Pekerja{}, salahInput("ID pekerja tidak valid.")
 	}
 	return s.repo.CariPekerja(ctx, id)
 }
@@ -173,18 +207,18 @@ func (s *Service) CariPekerja(ctx context.Context, id int64) (domain.Pekerja, er
 // Memanggil: Repositori.CariPekerja, Repositori.UpahPadaTanggal, Repositori.SimpanUpah.
 func (s *Service) TambahRiwayatUpah(ctx context.Context, upah domain.Upah) error {
 	if upah.PekerjaID <= 0 {
-		return errors.New("Pekerja wajib dipilih.")
+		return salahInput("Pekerja wajib dipilih.")
 	}
 	if upah.Nominal <= 0 {
-		return errors.New("Nominal upah harus lebih dari 0.")
+		return salahInput("Nominal upah harus lebih dari 0.")
 	}
 	if upah.BerlakuMulai.IsZero() {
-		return errors.New("Tanggal berlaku upah wajib diisi.")
+		return salahInput("Tanggal berlaku upah wajib diisi.")
 	}
 	upah.BerlakuMulai = tanggalSaja(upah.BerlakuMulai)
 	upah.Alasan = strings.TrimSpace(upah.Alasan)
 	if utf8.RuneCountInString(upah.Alasan) > 100 {
-		return errors.New("Alasan perubahan upah maksimal 100 karakter.")
+		return salahInput("Alasan perubahan upah maksimal 100 karakter.")
 	}
 
 	pekerja, err := s.repo.CariPekerja(ctx, upah.PekerjaID)
@@ -192,7 +226,7 @@ func (s *Service) TambahRiwayatUpah(ctx context.Context, upah domain.Upah) error
 		return err
 	}
 	if upah.BerlakuMulai.Before(tanggalSaja(pekerja.TanggalMulai)) {
-		return errors.New("Tanggal berlaku upah tidak boleh sebelum pekerja mulai bekerja.")
+		return salahInput("Tanggal berlaku upah tidak boleh sebelum pekerja mulai bekerja.")
 	}
 
 	sudahAda, err := s.repo.UpahPadaTanggal(ctx, upah.PekerjaID, upah.BerlakuMulai)
@@ -200,7 +234,7 @@ func (s *Service) TambahRiwayatUpah(ctx context.Context, upah domain.Upah) error
 		return err
 	}
 	if sudahAda {
-		return errors.New("Sudah ada upah dengan tanggal berlaku yang sama.")
+		return salahInput("Sudah ada upah dengan tanggal berlaku yang sama.")
 	}
 	return s.repo.SimpanUpah(ctx, &upah)
 }
@@ -214,7 +248,7 @@ func (s *Service) TambahRiwayatUpah(ctx context.Context, upah domain.Upah) error
 // Memanggil: Repositori.DaftarUpah.
 func (s *Service) DaftarRiwayatUpah(ctx context.Context, pekerjaID int64) ([]domain.Upah, error) {
 	if pekerjaID <= 0 {
-		return nil, errors.New("ID pekerja tidak valid.")
+		return nil, salahInput("ID pekerja tidak valid.")
 	}
 	return s.repo.DaftarUpah(ctx, pekerjaID)
 }
@@ -228,10 +262,10 @@ func (s *Service) DaftarRiwayatUpah(ctx context.Context, pekerjaID int64) ([]dom
 // Memanggil: Repositori.UpahBerlaku.
 func (s *Service) CariUpahBerlaku(ctx context.Context, pekerjaID int64, tanggal time.Time) (domain.Rupiah, error) {
 	if pekerjaID <= 0 {
-		return 0, errors.New("ID pekerja tidak valid.")
+		return 0, salahInput("ID pekerja tidak valid.")
 	}
 	if tanggal.IsZero() {
-		return 0, errors.New("Tanggal kerja wajib diisi.")
+		return 0, salahInput("Tanggal kerja wajib diisi.")
 	}
 	upah, err := s.repo.UpahBerlaku(ctx, pekerjaID, tanggalSaja(tanggal))
 	if err != nil {
@@ -249,15 +283,15 @@ func (s *Service) CariUpahBerlaku(ctx context.Context, pekerjaID int64, tanggal 
 // Memanggil: Repositori.PekerjaAktif.
 func (s *Service) DaftarPekerjaAktif(ctx context.Context, jenis domain.JenisPekerja, mulai, selesai time.Time) ([]domain.Pekerja, error) {
 	if mulai.IsZero() || selesai.IsZero() {
-		return nil, errors.New("Rentang tanggal periode wajib diisi.")
+		return nil, salahInput("Rentang tanggal periode wajib diisi.")
 	}
 	mulai = tanggalSaja(mulai)
 	selesai = tanggalSaja(selesai)
 	if mulai.After(selesai) {
-		return nil, errors.New("Rentang tanggal periode tidak valid.")
+		return nil, salahInput("Rentang tanggal periode tidak valid.")
 	}
 	if jenis != "" && jenis != domain.PekerjaHarian && jenis != domain.PekerjaBulanan {
-		return nil, errors.New("Jenis pekerja harus Harian atau Bulanan.")
+		return nil, salahInput("Jenis pekerja harus Harian atau Bulanan.")
 	}
 	return s.repo.PekerjaAktif(ctx, jenis, mulai, selesai)
 }
@@ -274,26 +308,26 @@ func normalisasiPekerja(pekerja *domain.Pekerja) {
 
 func validasiPekerja(pekerja domain.Pekerja) error {
 	if pekerja.Kode == "" {
-		return errors.New("Kode pekerja wajib diisi.")
+		return salahInput("Kode pekerja wajib diisi.")
 	}
 	if utf8.RuneCountInString(pekerja.Kode) > 20 {
-		return errors.New("Kode pekerja maksimal 20 karakter.")
+		return salahInput("Kode pekerja maksimal 20 karakter.")
 	}
 	if pekerja.Nama == "" {
-		return errors.New("Nama pekerja wajib diisi.")
+		return salahInput("Nama pekerja wajib diisi.")
 	}
 	if utf8.RuneCountInString(pekerja.Nama) > 100 {
-		return errors.New("Nama pekerja maksimal 100 karakter.")
+		return salahInput("Nama pekerja maksimal 100 karakter.")
 	}
 	if pekerja.Jenis != domain.PekerjaHarian && pekerja.Jenis != domain.PekerjaBulanan {
-		return errors.New("Jenis pekerja harus Harian atau Bulanan.")
+		return salahInput("Jenis pekerja harus Harian atau Bulanan.")
 	}
 	if pekerja.TanggalMulai.IsZero() {
-		return errors.New("Tanggal mulai kerja wajib diisi.")
+		return salahInput("Tanggal mulai kerja wajib diisi.")
 	}
 	if pekerja.TanggalBerhenti != nil &&
 		tanggalSaja(*pekerja.TanggalBerhenti).Before(tanggalSaja(pekerja.TanggalMulai)) {
-		return errors.New("Tanggal berhenti tidak boleh sebelum tanggal mulai.")
+		return salahInput("Tanggal berhenti tidak boleh sebelum tanggal mulai.")
 	}
 	return nil
 }

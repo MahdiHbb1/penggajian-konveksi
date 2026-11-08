@@ -21,6 +21,7 @@ type fakeRepository struct {
 	nextUpahID    int64
 	lastFilter    Filter
 	err           error
+	errUpah       error
 }
 
 func newFakeRepository() *fakeRepository {
@@ -50,11 +51,42 @@ func (f *fakeRepository) SimpanPekerja(_ context.Context, pekerja *domain.Pekerj
 }
 
 func (f *fakeRepository) SimpanPekerjaDanUpah(_ context.Context, pekerja *domain.Pekerja, upah *domain.Upah) error {
-	if err := f.SimpanPekerja(context.Background(), pekerja); err != nil {
-		return err
+	if f.err != nil {
+		return f.err
 	}
-	upah.PekerjaID = pekerja.ID
-	return f.SimpanUpah(context.Background(), upah)
+	if id, ada := f.kode[pekerja.Kode]; ada && id != pekerja.ID {
+		return errors.New("Kode pekerja sudah dipakai.")
+	}
+
+	// Simulasikan transaksi: siapkan salinan, terbitkan hanya bila dua-duanya berhasil.
+	salinanPekerja := *pekerja
+	if salinanPekerja.ID == 0 {
+		salinanPekerja.ID = f.nextPekerjaID
+	}
+	salinanUpah := *upah
+	salinanUpah.PekerjaID = salinanPekerja.ID
+	if salinanUpah.ID == 0 {
+		salinanUpah.ID = f.nextUpahID
+	}
+
+	if f.errUpah != nil {
+		return f.errUpah
+	}
+	for _, lama := range f.upah[salinanPekerja.ID] {
+		if samaTanggal(lama.BerlakuMulai, salinanUpah.BerlakuMulai) {
+			return errors.New("Sudah ada upah dengan tanggal berlaku yang sama.")
+		}
+	}
+
+	f.nextPekerjaID = salinanPekerja.ID + 1
+	f.nextUpahID = salinanUpah.ID + 1
+	f.pekerja[salinanPekerja.ID] = salinanPekerja
+	f.kode[salinanPekerja.Kode] = salinanPekerja.ID
+	f.upah[salinanPekerja.ID] = append(f.upah[salinanPekerja.ID], salinanUpah)
+
+	*pekerja = salinanPekerja
+	*upah = salinanUpah
+	return nil
 }
 
 func (f *fakeRepository) UbahPekerja(_ context.Context, pekerja domain.Pekerja) error {
@@ -134,6 +166,9 @@ func (f *fakeRepository) KodeSudahDipakai(_ context.Context, kode string, kecual
 func (f *fakeRepository) SimpanUpah(_ context.Context, upah *domain.Upah) error {
 	if f.err != nil {
 		return f.err
+	}
+	if f.errUpah != nil {
+		return f.errUpah
 	}
 	for _, lama := range f.upah[upah.PekerjaID] {
 		if samaTanggal(lama.BerlakuMulai, upah.BerlakuMulai) {
@@ -304,6 +339,74 @@ func TestTambahPekerjaMenyimpanUpahAwal(t *testing.T) {
 	}
 	if upah[0].Alasan == "" {
 		t.Fatal("alasan upah awal tidak boleh kosong")
+	}
+}
+
+func TestTambahPekerjaTidakMenyimpanBilaUpahGagal(t *testing.T) {
+	repo := newFakeRepository()
+	repo.errUpah = errors.New("gagal menyimpan upah")
+	svc := NewService(repo)
+
+	_, err := svc.TambahPekerja(context.Background(), domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2),
+	}, 100000)
+	if err == nil {
+		t.Fatal("TambahPekerja seharusnya gagal saat upah gagal disimpan")
+	}
+	if len(repo.pekerja) != 0 || len(repo.kode) != 0 || len(repo.upah) != 0 {
+		t.Fatalf("data tidak boleh tersimpan sebagian: pekerja=%d kode=%d upah=%d",
+			len(repo.pekerja), len(repo.kode), len(repo.upah))
+	}
+}
+
+func TestTambahPekerjaTolakTanggalBerhenti(t *testing.T) {
+	svc := NewService(newFakeRepository())
+	berhenti := tanggal(2026, time.November, 20)
+
+	_, err := svc.TambahPekerja(context.Background(), domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), TanggalBerhenti: &berhenti,
+	}, 100000)
+	if err == nil || err.Error() != "Pekerja baru tidak boleh memiliki tanggal berhenti." {
+		t.Fatalf("galat = %v, ingin penolakan tanggal berhenti pada pekerja baru", err)
+	}
+}
+
+func TestUbahPekerjaTolakPerubahanTanggalMulaiBilaAdaRiwayat(t *testing.T) {
+	repo := newFakeRepository()
+	lama := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+	if err := repo.SimpanUpah(context.Background(), &domain.Upah{
+		PekerjaID: lama.ID, Nominal: 100000, BerlakuMulai: tanggal(2026, time.November, 2),
+	}); err != nil {
+		t.Fatalf("gagal menyiapkan upah: %v", err)
+	}
+	svc := NewService(repo)
+
+	lama.TanggalMulai = tanggal(2026, time.November, 1)
+	err := svc.UbahPekerja(context.Background(), lama)
+	if err == nil || err.Error() != "Tanggal mulai tidak dapat diubah karena sudah ada riwayat upah." {
+		t.Fatalf("galat = %v, ingin penolakan perubahan tanggal mulai", err)
+	}
+}
+
+func TestUbahPekerjaBolehMengubahTanggalMulaiTanpaRiwayat(t *testing.T) {
+	repo := newFakeRepository()
+	lama := seedPekerja(t, repo, domain.Pekerja{
+		Kode: "P-001", Nama: "Budi", Jenis: domain.PekerjaHarian,
+		TanggalMulai: tanggal(2026, time.November, 2), Aktif: true,
+	})
+	svc := NewService(repo)
+
+	lama.TanggalMulai = tanggal(2026, time.November, 1)
+	if err := svc.UbahPekerja(context.Background(), lama); err != nil {
+		t.Fatalf("UbahPekerja gagal: %v", err)
+	}
+	if !samaTanggal(repo.pekerja[lama.ID].TanggalMulai, tanggal(2026, time.November, 1)) {
+		t.Fatalf("tanggal mulai = %v, ingin 2026-11-01", repo.pekerja[lama.ID].TanggalMulai)
 	}
 }
 

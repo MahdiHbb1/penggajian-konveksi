@@ -20,7 +20,8 @@
       <p class="ket">Jenis tidak dapat diubah setelah disimpan.</p>
     </fieldset>
     <label>Tanggal mulai kerja
-      <input type="date" name="tanggal_mulai" required value="{{.Isi.TanggalMulai}}">
+      <input type="date" name="tanggal_mulai" required {{if not .Isi.Baru}}readonly{{end}} value="{{.Isi.TanggalMulai}}">
+      {{if not .Isi.Baru}}<span class="ket">Tanggal mulai tidak dapat diubah setelah pekerja memiliki riwayat upah.</span>{{end}}
     </label>
     {{if .Isi.Baru}}
     <label>Upah awal (rupiah)
@@ -31,7 +32,7 @@
     {{if not .Isi.Baru}}
     <label>Tanggal berhenti
       <input type="date" name="tanggal_berhenti" value="{{.Isi.TanggalBerhenti}}">
-      <span class="ket">Isi bila pekerja berhenti; kosongkan bila masih aktif.</span>
+      <span class="ket">Isi bila pekerja berhenti. Tanggal yang sudah tercatat tidak dapat dikosongkan lewat halaman ini.</span>
     </label>
     {{end}}
     <div class="aksi penuh">
