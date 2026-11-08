@@ -1,35 +1,40 @@
 {{define "konten"}}
 <!-- Pemilik: Mahdi | Modul 1 -->
-<!-- TODO(Mahdi): isi nilai form saat ubah dan sambungkan aksi simpan ke service. -->
 <section class="panel">
-  <form class="form-grid" method="post" action="">
+  <form class="form-grid" method="post" action="{{.Isi.Aksi}}">
     <label>Kode pekerja
-      <input type="text" name="kode" maxlength="20" required placeholder="P-001">
+      <input type="text" name="kode" maxlength="20" required placeholder="P-001" value="{{.Isi.Kode}}">
     </label>
     <label>Nama lengkap
-      <input type="text" name="nama" maxlength="100" required>
+      <input type="text" name="nama" maxlength="100" required value="{{.Isi.Nama}}">
     </label>
     <fieldset class="penuh">
       <legend>Jenis pekerja</legend>
       <label style="display:inline-flex; gap:8px; margin-right:18px;">
-        <input type="radio" name="jenis" value="HARIAN" required> Harian
+        <input type="radio" name="jenis" value="HARIAN" required {{if eq .Isi.Jenis "HARIAN"}}checked{{end}} {{if not .Isi.Baru}}disabled{{end}}> Harian
       </label>
       <label style="display:inline-flex; gap:8px;">
-        <input type="radio" name="jenis" value="BULANAN" required> Bulanan
+        <input type="radio" name="jenis" value="BULANAN" required {{if eq .Isi.Jenis "BULANAN"}}checked{{end}} {{if not .Isi.Baru}}disabled{{end}}> Bulanan
       </label>
+      {{if not .Isi.Baru}}<input type="hidden" name="jenis" value="{{.Isi.Jenis}}">{{end}}
       <p class="ket">Jenis tidak dapat diubah setelah disimpan.</p>
     </fieldset>
     <label>Tanggal mulai kerja
-      <input type="date" name="tanggal_mulai" required>
+      <input type="date" name="tanggal_mulai" required {{if not .Isi.Baru}}readonly{{end}} value="{{.Isi.TanggalMulai}}">
+      {{if not .Isi.Baru}}<span class="ket">Tanggal mulai tidak dapat diubah lewat halaman ini.</span>{{end}}
     </label>
+    {{if .Isi.Baru}}
     <label>Upah awal (rupiah)
-      <input type="number" name="upah_awal" min="1" step="1" placeholder="100000">
-      <span class="ket">Hanya diisi saat menambah pekerja. Upah pertama dibuat otomatis pada tanggal mulai.</span>
+      <input type="number" name="upah_awal" min="1" step="1" placeholder="100000" required {{if .Isi.UpahAwal}}value="{{.Isi.UpahAwal}}"{{end}}>
+      <span class="ket">Upah pertama dibuat otomatis pada tanggal mulai.</span>
     </label>
+    {{end}}
+    {{if not .Isi.Baru}}
     <label>Tanggal berhenti
-      <input type="date" name="tanggal_berhenti">
-      <span class="ket">Hanya diisi saat mengubah pekerja yang berhenti.</span>
+      <input type="date" name="tanggal_berhenti" value="{{.Isi.TanggalBerhenti}}">
+      <span class="ket">Isi bila pekerja berhenti. Tanggal yang sudah tercatat tidak dapat dikosongkan lewat halaman ini.</span>
     </label>
+    {{end}}
     <div class="aksi penuh">
       <button class="btn" type="submit">Simpan</button>
       <a class="btn btn-sekunder" href="/pekerja">Batal</a>
