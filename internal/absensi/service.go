@@ -102,11 +102,12 @@ func (s *Service) AdaAbsensiBelumLengkap(ctx context.Context, periodeID int64) (
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
 //
-// TODO(Zahra):
-//  1. Hitung selisih jam masuk dikurangi jam mulai shift.
-//  2. Kembalikan 0 bila negatif, karena datang lebih awal tidak dihitung.
 func (s *Service) HitungMenitTerlambat(jamMasuk time.Time, jamMulaiShift time.Time) int {
-	return 0
+	menit := int(jamMasuk.Sub(jamMulaiShift).Minutes())
+	if menit < 0 {
+		return 0
+	}
+	return menit
 }
 
 // HitungMenitLembur menghitung selisih jam keluar terhadap jam selesai shift.
@@ -117,11 +118,12 @@ func (s *Service) HitungMenitTerlambat(jamMasuk time.Time, jamMulaiShift time.Ti
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
 //
-// TODO(Zahra):
-//  1. Hitung selisih jam keluar dikurangi jam selesai shift.
-//  2. Kembalikan 0 bila negatif, karena pulang lebih awal tidak dipotong.
 func (s *Service) HitungMenitLembur(jamKeluar time.Time, jamSelesaiShift time.Time) int {
-	return 0
+	menit := int(jamKeluar.Sub(jamSelesaiShift).Minutes())
+	if menit < 0 {
+		return 0
+	}
+	return menit
 }
 
 // Pastikan Service memenuhi kontrak lintas modul.

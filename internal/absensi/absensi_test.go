@@ -21,7 +21,6 @@ func TestHitungMenitTerlambat(t *testing.T) {
 
 	for _, k := range kasus {
 		t.Run(k.nama, func(t *testing.T) {
-			t.Skip("belum diimplementasi: HitungMenitTerlambat")
 			svc := NewService(NewRepository(nil))
 			if hasil := svc.HitungMenitTerlambat(k.jamMasuk, mulai); hasil != k.ingin {
 				t.Fatalf("menit terlambat = %d, ingin %d", hasil, k.ingin)
@@ -45,7 +44,6 @@ func TestHitungMenitLembur(t *testing.T) {
 
 	for _, k := range kasus {
 		t.Run(k.nama, func(t *testing.T) {
-			t.Skip("belum diimplementasi: HitungMenitLembur")
 			svc := NewService(NewRepository(nil))
 			jamSelesai := time.Date(2026, 11, 2, 23, 0, 0, 0, time.Local)
 			if hasil := svc.HitungMenitLembur(k.jamKeluar, jamSelesai); hasil != k.ingin {
