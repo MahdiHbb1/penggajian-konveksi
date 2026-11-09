@@ -1,16 +1,16 @@
 {{define "konten"}}
-<!-- Pemilik: Zahra | Modul 3 -->
-<!-- TODO(Zahra): isi baris dari jadwal tanggal terpilih dan pratinjau menit. -->
+<!-- Pemilik: Zahra | Modul 3 | Perlu review pemilik template: Fadli -->
 <section class="panel">
-  <form class="form-grid" method="post" action="/absensi">
+  <form class="form-grid" method="get" action="/absensi">
     <label>Tanggal absensi
-      <input type="date" name="tanggal" required>
+      <input type="date" name="tanggal" value="{{.Isi.Tanggal}}" required>
     </label>
     <div class="aksi">
-      <button class="btn" type="submit">Simpan absensi</button>
+      <button class="btn" type="submit">Tampilkan jadwal</button>
+      <a class="btn btn-sekunder" href="/absensi/belum-lengkap">Lihat absensi belum lengkap</a>
     </div>
   </form>
-  <p class="ket">Hanya pekerja yang punya jadwal pada tanggal itu yang tampil. Jam keluar boleh kosong sementara.</p>
+  <p class="ket">Hanya pekerja yang mempunyai jadwal pada tanggal terpilih yang ditampilkan. Jam keluar boleh dikosongkan sementara.</p>
 </section>
 
 <section class="panel">
@@ -18,16 +18,96 @@
     <table>
       <thead>
         <tr>
-          <th>Pekerja</th><th>Shift</th><th>Jam shift</th><th>Jam masuk</th><th>Jam keluar</th><th>Terlambat</th><th>Lembur</th>
+          <th>Pekerja</th>
+          <th>Shift</th>
+          <th>Jam shift</th>
+          <th>Jam masuk</th>
+          <th>Jam keluar</th>
+          <th>Terlambat (menit)</th>
+          <th>Lembur (menit)</th>
+          <th>Aksi</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td class="kosong" colspan="7">Belum ada jadwal pada tanggal ini.</td></tr>
+        {{range .Isi.Baris}}
+        {{$formID := printf "form-absensi-%d" .Jadwal.ID}}
+        <tr data-preview-row data-tanggal="{{$.Isi.Tanggal}}" data-mulai="{{.JamMulaiShift}}" data-selesai="{{.JamSelesaiShift}}">
+          <td>
+            <strong>{{.Jadwal.Pekerja.Nama}}</strong><br>
+            <small>{{.Jadwal.Pekerja.Kode}}</small>
+          </td>
+          <td>{{.Jadwal.Shift.Nama}}</td>
+          <td>{{.JamMulaiShift}}–{{.JamSelesaiShift}}</td>
+          <td>
+            <input type="time" name="jam_masuk" value="{{.JamMasuk}}" form="{{$formID}}" required aria-label="Jam masuk {{.Jadwal.Pekerja.Nama}}">
+          </td>
+          <td>
+            <input type="time" name="jam_keluar" value="{{.JamKeluar}}" form="{{$formID}}" aria-label="Jam keluar {{.Jadwal.Pekerja.Nama}}">
+          </td>
+          <td data-telat>—</td>
+          <td data-lembur>—</td>
+          <td>
+            <form id="{{$formID}}" method="post" action="/absensi">
+              <input type="hidden" name="tanggal" value="{{$.Isi.Tanggal}}">
+              <input type="hidden" name="jadwal_shift_id" value="{{.Jadwal.ID}}">
+              {{if .AdaAbsensi}}
+              <input type="hidden" name="absensi_id" value="{{.Absensi.ID}}">
+              {{end}}
+              <button class="btn btn-kecil" type="submit">{{if .AdaAbsensi}}Perbarui{{else}}Simpan{{end}}</button>
+            </form>
+            {{if .AdaAbsensi}}<small>Tersimpan</small>{{else}}<small>Belum dicatat</small>{{end}}
+          </td>
+        </tr>
+        {{else}}
+        <tr><td class="kosong" colspan="8">Belum ada jadwal pada tanggal ini.</td></tr>
+        {{end}}
       </tbody>
     </table>
   </div>
-  <p class="ket">Pratinjau menit terlambat dan lembur dihitung per baris. Shift siang yang keluar lewat tengah malam otomatis memakai tanggal berikutnya.</p>
+  <p class="ket">Pratinjau dihitung otomatis dari jam masuk dan jam keluar. Jam keluar yang lebih kecil dari jam masuk dianggap terjadi pada hari berikutnya. Perhitungan toleransi keterlambatan diterapkan pada proses penggajian.</p>
 </section>
 
 <p class="owner">Pemilik: Zahra | Modul 3</p>
+
+<script>
+(() => {
+  const rows = document.querySelectorAll("[data-preview-row]");
+  const toDate = (dateText, timeText) => {
+    if (!timeText) return null;
+    const parts = timeText.split(":").map(Number);
+    const [year, month, day] = dateText.split("-").map(Number);
+    return new Date(year, month - 1, day, parts[0] || 0, parts[1] || 0, parts[2] || 0);
+  };
+  const minutes = (later, earlier) => Math.max(0, Math.floor((later - earlier) / 60000));
+
+  rows.forEach((row) => {
+    const inputs = row.querySelectorAll('input[type="time"]');
+    const masukInput = inputs[0];
+    const keluarInput = inputs[1];
+    const telatCell = row.querySelector("[data-telat]");
+    const lemburCell = row.querySelector("[data-lembur]");
+
+    const updatePreview = () => {
+      const tanggal = row.dataset.tanggal;
+      const mulaiShift = toDate(tanggal, row.dataset.mulai);
+      const selesaiShift = toDate(tanggal, row.dataset.selesai);
+      if (selesaiShift <= mulaiShift) selesaiShift.setDate(selesaiShift.getDate() + 1);
+
+      const masuk = toDate(tanggal, masukInput.value);
+      const keluar = toDate(tanggal, keluarInput.value);
+
+      telatCell.textContent = masuk ? String(minutes(masuk, mulaiShift)) : "—";
+      if (keluar && masuk) {
+        if (keluar < masuk) keluar.setDate(keluar.getDate() + 1);
+        lemburCell.textContent = String(minutes(keluar, selesaiShift));
+      } else {
+        lemburCell.textContent = "—";
+      }
+    };
+
+    inputs.forEach((input) => input.addEventListener("input", updatePreview));
+    updatePreview();
+  });
+})();
+</script>
 {{end}}
