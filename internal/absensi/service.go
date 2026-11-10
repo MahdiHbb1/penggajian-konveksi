@@ -146,6 +146,12 @@ func (s *Service) DaftarPeriode(ctx context.Context) ([]domain.PeriodeGaji, erro
 
 // HitungMenitTerlambat menghitung selisih jam masuk terhadap jam mulai shift.
 // Hasil dibulatkan ke bawah ke menit penuh dan tidak pernah negatif.
+//
+// Masukan: jam masuk dan jam mulai shift.
+// Hasil: menit terlambat, minimal 0.
+// Aturan: 4, 5.
+// Tabel: tidak ada.
+// Memanggil: tidak ada.
 func (s *Service) HitungMenitTerlambat(jamMasuk time.Time, jamMulaiShift time.Time) int {
 	return menitPositif(jamMasuk.Sub(jamMulaiShift))
 }

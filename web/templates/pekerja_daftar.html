@@ -1,23 +1,22 @@
 {{define "konten"}}
 <!-- Pemilik: Mahdi | Modul 1 -->
-<!-- TODO(Mahdi): isi tabel dari Service.DaftarPekerja, aktifkan filter dan tombol aksi. -->
 <section class="panel">
   <form class="form-grid" method="get" action="/pekerja">
     <label>Cari nama atau kode
-      <input type="search" name="cari" placeholder="Contoh: P-001 atau Budi">
+      <input type="search" name="cari" value="{{.Isi.Cari}}" placeholder="Contoh: P-001 atau Budi">
     </label>
     <label>Jenis
       <select name="jenis">
         <option value="">Semua jenis</option>
-        <option value="HARIAN">Harian</option>
-        <option value="BULANAN">Bulanan</option>
+        <option value="HARIAN" {{if eq .Isi.Jenis "HARIAN"}}selected{{end}}>Harian</option>
+        <option value="BULANAN" {{if eq .Isi.Jenis "BULANAN"}}selected{{end}}>Bulanan</option>
       </select>
     </label>
     <label>Status
       <select name="aktif">
         <option value="">Semua status</option>
-        <option value="1">Aktif</option>
-        <option value="0">Nonaktif</option>
+        <option value="1" {{if eq .Isi.Aktif "1"}}selected{{end}}>Aktif</option>
+        <option value="0" {{if eq .Isi.Aktif "0"}}selected{{end}}>Nonaktif</option>
       </select>
     </label>
     <div class="aksi">
@@ -38,7 +37,27 @@
         <tr><th>Kode</th><th>Nama</th><th>Jenis</th><th>Mulai kerja</th><th>Status</th><th>Aksi</th></tr>
       </thead>
       <tbody>
+        {{range .Isi.Pekerja}}
+        <tr>
+          <td>{{.Kode}}</td>
+          <td>{{.Nama}}</td>
+          <td>{{.JenisLabel}}</td>
+          <td>{{.TanggalMulai}}</td>
+          <td>{{.Status}}</td>
+          <td>
+            <a class="btn btn-kecil btn-sekunder" href="/pekerja/{{.ID}}/ubah">Ubah</a>
+            <a class="btn btn-kecil btn-sekunder" href="/pekerja/{{.ID}}/upah">Upah</a>
+            {{if .Aktif}}
+            <form method="post" action="/pekerja/{{.ID}}/nonaktif" style="display:inline-flex; gap:6px; margin-left:6px; vertical-align:middle;">
+              <input type="date" name="tanggal_berhenti" aria-label="Tanggal berhenti {{.Nama}}" style="min-height:36px; width:auto;">
+              <button class="btn btn-kecil btn-bahaya" type="submit">Nonaktifkan</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+        {{else}}
         <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+        {{end}}
       </tbody>
     </table>
   </div>
