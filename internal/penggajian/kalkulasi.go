@@ -4,6 +4,7 @@ package penggajian
 import (
 	"time"
 
+	"penggajian-konveksi/internal/config"
 	"penggajian-konveksi/internal/domain"
 )
 
@@ -21,12 +22,23 @@ type SegmenUpah struct {
 // Aturan: 1, 9.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. Iterasi tanggal mulai sampai selesai.
-//  2. Lewati hari Minggu.
 func HitungHariKerja(mulai, selesai time.Time) int {
-	return 0
+	if mulai.IsZero() || selesai.IsZero() {
+		return 0
+	}
+	mulai = tanggalSaja(mulai)
+	selesai = tanggalSaja(selesai)
+	if selesai.Before(mulai) {
+		return 0
+	}
+
+	jumlah := 0
+	for tanggal := mulai; !tanggal.After(selesai); tanggal = tanggal.AddDate(0, 0, 1) {
+		if tanggal.Weekday() != time.Sunday {
+			jumlah++
+		}
+	}
+	return jumlah
 }
 
 // HitungUpahPerJam menghitung upah per jam sesuai jenis pekerja.
@@ -36,12 +48,18 @@ func HitungHariKerja(mulai, selesai time.Time) int {
 // Aturan: 7.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. Harian: nominal dibagi 8.
-//  2. Bulanan: nominal dibagi 173.
 func HitungUpahPerJam(nominal domain.Rupiah, jenis domain.JenisPekerja) domain.Rupiah {
-	return 0
+	if nominal <= 0 {
+		return 0
+	}
+	switch jenis {
+	case domain.PekerjaHarian:
+		return nominal / domain.Rupiah(config.JamKerjaPerHari)
+	case domain.PekerjaBulanan:
+		return nominal / domain.Rupiah(config.HariKerjaPerBulan)
+	default:
+		return 0
+	}
 }
 
 // HitungUpahPokokHarian menjumlahkan upah pokok seluruh hari hadir.
@@ -51,11 +69,14 @@ func HitungUpahPerJam(nominal domain.Rupiah, jenis domain.JenisPekerja) domain.R
 // Aturan: 9.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. Jumlahkan UpahPokokHari pada setiap rincian.
 func HitungUpahPokokHarian(rincian []domain.SlipGajiDetail) domain.Rupiah {
-	return 0
+	var total domain.Rupiah
+	for _, r := range rincian {
+		if r.UpahPokokHari > 0 {
+			total += r.UpahPokokHari
+		}
+	}
+	return total
 }
 
 // HitungUpahPokokBulanan menjumlahkan upah proporsional per segmen.
@@ -65,13 +86,19 @@ func HitungUpahPokokHarian(rincian []domain.SlipGajiDetail) domain.Rupiah {
 // Aturan: 9, 10.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. Untuk setiap segmen, hitung nominal x hari dijalani / hari kerja bulan.
-//  2. Bulatkan ke bawah per segmen, lalu jumlahkan.
-//  3. Pekerja bulanan tetap mendapat upah pokok meski tidak masuk.
 func HitungUpahPokokBulanan(segmen []SegmenUpah) domain.Rupiah {
-	return 0
+	var total domain.Rupiah
+	for _, s := range segmen {
+		if s.Nominal <= 0 || s.HariDijalani <= 0 || s.HariKerjaBulan <= 0 {
+			continue
+		}
+		hari := s.HariDijalani
+		if hari > s.HariKerjaBulan {
+			hari = s.HariKerjaBulan
+		}
+		total += s.Nominal * domain.Rupiah(hari) / domain.Rupiah(s.HariKerjaBulan)
+	}
+	return total
 }
 
 // HitungPotonganTerlambat menghitung potongan satu jam bila terlambat.
@@ -81,12 +108,11 @@ func HitungUpahPokokBulanan(segmen []SegmenUpah) domain.Rupiah {
 // Aturan: 5.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. Terlambat lebih dari 15 menit dipotong satu kali upah per jam.
-//  2. Tepat 15 menit tidak dipotong.
 func HitungPotonganTerlambat(menitTelat int, upahPerJam domain.Rupiah) domain.Rupiah {
-	return 0
+	if menitTelat <= config.MenitTerlambatDipotong || upahPerJam <= 0 {
+		return 0
+	}
+	return upahPerJam
 }
 
 // HitungUpahLembur menghitung upah lembur per menit.
@@ -96,13 +122,28 @@ func HitungPotonganTerlambat(menitTelat int, upahPerJam domain.Rupiah) domain.Ru
 // Aturan: 6.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. 60 menit pertama memakai pengali 1,5.
-//  2. Menit berikutnya memakai pengali 2.
-//  3. Hitung per menit lalu bulatkan ke bawah.
 func HitungUpahLembur(menitLembur int, upahPerJam domain.Rupiah) domain.Rupiah {
-	return 0
+	if menitLembur <= 0 || upahPerJam <= 0 {
+		return 0
+	}
+
+	const (
+		menitLemburPertama = 60
+		penyebutPengali    = 2
+	)
+	menitPertama := menitLembur
+	if menitPertama > menitLemburPertama {
+		menitPertama = menitLemburPertama
+	}
+	menitBerikut := menitLembur - menitPertama
+
+	// Pengali 1,5 dan 2 diubah ke bilangan bulat: 3/2 dan 4/2, lalu penyebutnya
+	// disamakan menjadi 120 menit. Tidak ada nominal uang yang menjadi float64.
+	pengaliPertama := domain.Rupiah(config.PengaliLemburPertama * penyebutPengali)
+	pengaliBerikut := domain.Rupiah(config.PengaliLemburBerikutnya * penyebutPengali)
+	pembilang := domain.Rupiah(menitPertama)*pengaliPertama*upahPerJam +
+		domain.Rupiah(menitBerikut)*pengaliBerikut*upahPerJam
+	return pembilang / domain.Rupiah(menitLemburPertama*penyebutPengali)
 }
 
 // HitungGajiBruto menghitung gaji bruto.
@@ -112,13 +153,8 @@ func HitungUpahLembur(menitLembur int, upahPerJam domain.Rupiah) domain.Rupiah {
 // Aturan: 12.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. Jumlahkan pokok dan lembur.
-//  2. Kurangi potongan terlambat.
-//  3. Tambahkan koreksi yang boleh negatif.
 func HitungGajiBruto(pokok, lembur, potonganTelat, koreksi domain.Rupiah) domain.Rupiah {
-	return 0
+	return pokok + lembur - potonganTelat + koreksi
 }
 
 // AlokasiPotonganKasbon membagi potongan kasbon dari yang tertua.
@@ -128,11 +164,47 @@ func HitungGajiBruto(pokok, lembur, potonganTelat, koreksi domain.Rupiah) domain
 // Aturan: 12.
 // Tabel: tidak ada.
 // Memanggil: tidak ada.
-//
-// TODO(Farah):
-//  1. Hitung batas 30% dari bruto.
-//  2. Ambil minimum antara total sisa dan batas.
-//  3. Alokasikan berurutan dari kasbon tertua.
 func AlokasiPotonganKasbon(bruto domain.Rupiah, daftar []domain.Kasbon) ([]domain.PotonganKasbon, domain.Rupiah) {
-	return nil, 0
+	if bruto <= 0 || len(daftar) == 0 {
+		return nil, 0
+	}
+
+	batas := bruto * domain.Rupiah(config.PersenBatasKasbon) / 100
+	if batas <= 0 {
+		return nil, 0
+	}
+
+	var (
+		potongan []domain.PotonganKasbon
+		total    domain.Rupiah
+	)
+	for _, k := range daftar {
+		if total >= batas {
+			break
+		}
+		if k.ID <= 0 || k.Sisa <= 0 {
+			continue
+		}
+		jumlah := k.Sisa
+		if sisaBatas := batas - total; jumlah > sisaBatas {
+			jumlah = sisaBatas
+		}
+		if jumlah <= 0 {
+			break
+		}
+		potongan = append(potongan, domain.PotonganKasbon{
+			KasbonID: k.ID,
+			Jumlah:   jumlah,
+		})
+		total += jumlah
+	}
+	return potongan, total
+}
+
+func tanggalSaja(t time.Time) time.Time {
+	if t.IsZero() {
+		return t
+	}
+	tahun, bulan, hari := t.Date()
+	return time.Date(tahun, bulan, hari, 0, 0, 0, 0, t.Location())
 }
