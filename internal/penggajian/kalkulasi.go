@@ -2,6 +2,7 @@
 package penggajian
 
 import (
+	"sort"
 	"time"
 
 	"penggajian-konveksi/internal/config"
@@ -174,11 +175,21 @@ func AlokasiPotonganKasbon(bruto domain.Rupiah, daftar []domain.Kasbon) ([]domai
 		return nil, 0
 	}
 
+	// Salin agar urutan pemanggil tidak berubah, lalu pastikan kasbon tertua
+	// dipotong lebih dulu.
+	urut := append([]domain.Kasbon(nil), daftar...)
+	sort.SliceStable(urut, func(i, j int) bool {
+		if urut[i].Tanggal.Equal(urut[j].Tanggal) {
+			return urut[i].ID < urut[j].ID
+		}
+		return urut[i].Tanggal.Before(urut[j].Tanggal)
+	})
+
 	var (
 		potongan []domain.PotonganKasbon
 		total    domain.Rupiah
 	)
-	for _, k := range daftar {
+	for _, k := range urut {
 		if total >= batas {
 			break
 		}

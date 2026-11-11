@@ -187,8 +187,8 @@ func TestAlokasiPotonganKasbon(t *testing.T) {
 
 func TestAlokasiPotonganKasbonUrutTertua(t *testing.T) {
 	kasbon := []domain.Kasbon{
-		{ID: 10, Sisa: 200000},
-		{ID: 11, Sisa: 200000},
+		{ID: 11, Tanggal: tanggal(2026, 11, 10), Sisa: 200000},
+		{ID: 10, Tanggal: tanggal(2026, 11, 1), Sisa: 200000},
 	}
 	potongan, total := AlokasiPotonganKasbon(1000000, kasbon)
 	if total != 300000 {

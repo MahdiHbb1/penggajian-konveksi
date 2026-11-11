@@ -347,6 +347,48 @@ func TestHitungGajiPeriodeBulananProporsionalMasukPertengahanBulan(t *testing.T)
 	}
 }
 
+func TestHitungGajiPeriodeBulananContohC(t *testing.T) {
+	repo := newFakeRepo()
+	periode := domain.PeriodeGaji{
+		ID: 9, Tipe: domain.PeriodeBulanan,
+		TanggalMulai: tanggal(2026, 11, 1), TanggalSelesai: tanggal(2026, 11, 30),
+		Status: domain.PeriodeTerbuka,
+	}
+	repo.periode = periode
+	pekerja := domain.Pekerja{
+		ID: 9, Kode: "P-009", Nama: "Tari", Jenis: domain.PekerjaBulanan,
+		TanggalMulai: tanggal(2026, 1, 1), Aktif: true,
+	}
+	repo.workers[domain.PekerjaBulanan] = []domain.Pekerja{pekerja}
+	repo.upah[pekerja.ID] = []domain.Upah{
+		{Nominal: 3000000, BerlakuMulai: tanggal(2026, 1, 1)},
+		{Nominal: 3460000, BerlakuMulai: tanggal(2026, 11, 16)},
+	}
+
+	if err := serviceUji(repo).HitungGajiPeriode(context.Background(), periode.ID); err != nil {
+		t.Fatalf("hitung gaji: %v", err)
+	}
+	slip := repo.slips[pekerja.ID]
+	// 3.000.000 x 12/25 = 1.440.000; 3.460.000 x 13/25 = 1.799.200.
+	if slip.UpahPokok != 3239200 || slip.GajiBruto != 3239200 || slip.GajiBersih != 3239200 {
+		t.Fatalf("slip contoh C = pokok %d bruto %d bersih %d",
+			slip.UpahPokok, slip.GajiBruto, slip.GajiBersih)
+	}
+	if slip.HariKerjaDibayar != 25 || slip.HariKerjaPeriode != 25 {
+		t.Fatalf("hari kerja = %d/%d, ingin 25/25",
+			slip.HariKerjaDibayar, slip.HariKerjaPeriode)
+	}
+	if len(repo.hasilHitung) != 1 {
+		t.Fatalf("jumlah hasil hitung = %d, ingin 1", len(repo.hasilHitung))
+	}
+	if len(repo.hasilHitung[0].Rincian) != 0 {
+		t.Fatalf("rincian = %d, ingin 0", len(repo.hasilHitung[0].Rincian))
+	}
+	if repo.status != domain.PeriodeDihitung {
+		t.Fatalf("status periode = %s, ingin DIHITUNG", repo.status)
+	}
+}
+
 func TestHitungGajiPeriodeBulananContohB(t *testing.T) {
 	repo := newFakeRepo()
 	periode := domain.PeriodeGaji{
