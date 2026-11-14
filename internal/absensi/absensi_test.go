@@ -30,7 +30,7 @@ func TestHitungMenitTerlambat(t *testing.T) {
 }
 
 func TestHitungMenitLembur(t *testing.T) {
-	selesai := time.Date(2026, 11, 2, 15, 0, 0, 0, time.Local)
+	selesai := time.Date(2026, 11, 2, 23, 0, 0, 0, time.Local)
 	kasus := []struct {
 		nama      string
 		jamKeluar time.Time
@@ -45,8 +45,7 @@ func TestHitungMenitLembur(t *testing.T) {
 	for _, k := range kasus {
 		t.Run(k.nama, func(t *testing.T) {
 			svc := NewService(NewRepository(nil))
-			jamSelesai := time.Date(2026, 11, 2, 23, 0, 0, 0, time.Local)
-			if hasil := svc.HitungMenitLembur(k.jamKeluar, jamSelesai); hasil != k.ingin {
+			if hasil := svc.HitungMenitLembur(k.jamKeluar, selesai); hasil != k.ingin {
 				t.Fatalf("menit lembur = %d, ingin %d", hasil, k.ingin)
 			}
 		})
