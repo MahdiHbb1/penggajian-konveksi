@@ -1,30 +1,57 @@
 {{define "konten"}}
 <!-- Pemilik: Farah | Modul 4 -->
-<!-- TODO(Farah): isi pilihan periode, hasil prasyarat, dan tabel hasil hitung. -->
 <section class="panel">
-  <form class="form-grid" method="post" action="/penggajian">
+  <form class="form-grid" method="get" action="/penggajian">
     <label>Periode
       <select name="periode_id" required>
         <option value="">Pilih periode</option>
+        {{range .Isi.DaftarPeriode}}
+        <option value="{{.ID}}" {{if .Terpilih}}selected{{end}}>{{.Label}}</option>
+        {{end}}
       </select>
     </label>
-    <label>Status periode
-      <input type="text" value="-" readonly>
-    </label>
     <div class="aksi">
-      <button class="btn" type="submit">Hitung gaji</button>
+      <button class="btn" type="submit">Tampilkan</button>
     </div>
   </form>
 </section>
 
+{{if .Isi.AdaPeriode}}
 <section class="panel">
+  <h2>Status periode</h2>
+  <dl class="slip-meta">
+    <dt>Tipe periode</dt><dd>{{.Isi.TipeLabel}}</dd>
+    <dt>Rentang</dt><dd>{{.Isi.Rentang}}</dd>
+    <dt>Status</dt><dd>{{.Isi.Status}}</dd>
+    <dt>Jumlah slip</dt><dd>{{.Isi.JumlahSlip}}</dd>
+  </dl>
+
   <h2>Pemeriksaan prasyarat</h2>
   <ul>
-    <li>Periode berstatus Terbuka atau Dihitung.</li>
-    <li>Periode sebelumnya dengan tipe sama sudah ditutup.</li>
-    <li>Tidak ada absensi tanpa jam keluar.</li>
+    <li>
+      <strong>{{if .Isi.Prasyarat.StatusOK}}Lolos{{else}}Gagal{{end}}</strong>
+      &mdash; Periode berstatus Terbuka atau Dihitung.
+    </li>
+    <li>
+      <strong>{{if .Isi.Prasyarat.SebelumnyaOK}}Lolos{{else}}Gagal{{end}}</strong>
+      &mdash; Periode sebelumnya dengan tipe yang sama sudah ditutup.
+    </li>
+    <li>
+      <strong>{{if .Isi.Prasyarat.AbsensiLengkap}}Lolos{{else}}Gagal{{end}}</strong>
+      &mdash; Tidak ada absensi tanpa jam keluar.
+      {{if .Isi.Prasyarat.JumlahKurang}}
+      ({{.Isi.Prasyarat.JumlahKurang}} absensi belum lengkap)
+      {{end}}
+    </li>
   </ul>
-  <p class="ket">Hasil pemeriksaan akan menampilkan Lolos atau Gagal beserta daftar absensi yang kurang.</p>
+  {{if .Isi.Prasyarat.Pesan}}<p class="ket">{{.Isi.Prasyarat.Pesan}}</p>{{end}}
+
+  <div class="aksi">
+    <form method="post" action="/penggajian">
+      <input type="hidden" name="periode_id" value="{{.Isi.PeriodeID}}">
+      <button class="btn" type="submit">Hitung gaji</button>
+    </form>
+  </div>
 </section>
 
 <section class="panel">
@@ -33,19 +60,52 @@
     <table>
       <thead>
         <tr>
-          <th>Pekerja</th><th>Pokok</th><th>Lembur</th><th>Potongan telat</th><th>Koreksi</th><th>Bruto</th><th>Potongan kasbon</th><th>Bersih</th><th>Aksi</th>
+          <th>Pekerja</th><th>Jenis</th><th>Hari</th><th>Pokok</th><th>Lembur</th><th>Potongan telat</th><th>Koreksi</th><th>Bruto</th><th>Potongan kasbon</th><th>Bersih</th><th>Aksi</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td class="kosong" colspan="9">Belum ada hasil hitung.</td></tr>
+        {{range .Isi.Slip}}
+        <tr>
+          <td>{{.Kode}} - {{.Nama}}</td>
+          <td>{{.Jenis}}</td>
+          <td>{{.HariKerja}}</td>
+          <td>Rp {{.UpahPokok}}</td>
+          <td>Rp {{.Lembur}}</td>
+          <td>Rp {{.PotonganTelat}}</td>
+          <td>Rp {{.Koreksi}}</td>
+          <td>Rp {{.Bruto}}</td>
+          <td>Rp {{.PotonganKasbon}}</td>
+          <td>Rp {{.Bersih}}</td>
+          <td><a class="btn btn-kecil" href="/penggajian/{{$.Isi.PeriodeID}}/rincian/{{.PekerjaID}}">Rincian</a></td>
+        </tr>
+        {{else}}
+        <tr><td class="kosong" colspan="11">Belum ada hasil hitung untuk periode ini.</td></tr>
+        {{end}}
       </tbody>
+      {{if .Isi.Slip}}
       <tfoot>
-        <tr><th colspan="5">Total</th><td>Rp 0</td><td>Rp 0</td><td>Rp 0</td><td></td></tr>
+        <tr>
+          <th colspan="3">Total</th>
+          <td>Rp {{.Isi.TotalPokok}}</td>
+          <td>Rp {{.Isi.TotalLembur}}</td>
+          <td>Rp {{.Isi.TotalTelat}}</td>
+          <td>Rp {{.Isi.TotalKoreksi}}</td>
+          <td>Rp {{.Isi.TotalBruto}}</td>
+          <td>Rp {{.Isi.TotalKasbon}}</td>
+          <td>Rp {{.Isi.TotalBersih}}</td>
+          <td></td>
+        </tr>
       </tfoot>
+      {{end}}
     </table>
   </div>
-  <p class="ket">Hitung ulang menimpa slip lama pada periode yang sama.</p>
+  <p class="ket">Hitung ulang menimpa slip lama pada periode yang sama dan tidak menghitung koreksi dua kali.</p>
 </section>
+{{else}}
+<section class="panel">
+  <p class="ket">Pilih periode yang sudah dibuat untuk menampilkan prasyarat dan hasil hitung.</p>
+</section>
+{{end}}
 
 <p class="owner">Pemilik: Farah | Modul 4</p>
 {{end}}
