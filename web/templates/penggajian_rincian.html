@@ -1,11 +1,21 @@
 {{define "konten"}}
 <!-- Pemilik: Farah | Modul 4 -->
-<!-- TODO(Farah): isi kartu dan tabel dari AmbilRincianGaji; aktifkan hitung ulang. -->
+<section class="panel">
+  <h2>{{.Isi.Nama}}</h2>
+  <p class="ket">{{.Isi.Kode}} | {{.Isi.Jenis}}</p>
+  <dl class="slip-meta">
+    <dt>Periode</dt><dd>{{.Isi.PeriodeLabel}}</dd>
+    <dt>Status periode</dt><dd>{{.Isi.Status}}</dd>
+    <dt>Hari dibayar</dt><dd>{{.Isi.HariDibayar}}</dd>
+    <dt>Hari kerja periode</dt><dd>{{.Isi.HariPeriode}}</dd>
+  </dl>
+</section>
+
 <section class="card-grid">
-  <article class="card"><h2>Upah harian</h2><p class="angka">Rp 0</p></article>
-  <article class="card"><h2>Upah per jam</h2><p class="angka">Rp 0</p></article>
-  <article class="card"><h2>Hari hadir</h2><p class="angka">0</p></article>
-  <article class="card"><h2>Hari kerja periode</h2><p class="angka">0</p></article>
+  <article class="card"><h2>Upah pokok</h2><p class="angka">Rp {{.Isi.UpahPokok}}</p></article>
+  <article class="card"><h2>Upah per jam</h2><p class="angka">Rp {{.Isi.UpahPerJam}}</p></article>
+  <article class="card"><h2>Total lembur</h2><p class="angka">Rp {{.Isi.TotalLembur}}</p></article>
+  <article class="card"><h2>Gaji bersih</h2><p class="angka">Rp {{.Isi.GajiBersih}}</p></article>
 </section>
 
 <section class="panel">
@@ -18,28 +28,56 @@
         </tr>
       </thead>
       <tbody>
-        <tr><td class="kosong" colspan="9">Belum ada rincian.</td></tr>
+        {{range .Isi.Rincian}}
+        <tr>
+          <td>{{.Tanggal}}</td>
+          <td>{{.Shift}}</td>
+          <td>{{.Masuk}}</td>
+          <td>{{.Keluar}}</td>
+          <td>{{.MenitTelat}}</td>
+          <td>Rp {{.PotonganTelat}}</td>
+          <td>{{.MenitLembur}}</td>
+          <td>Rp {{.UpahLembur}}</td>
+          <td>{{if $.Isi.Bulanan}}-{{else}}Rp {{.UpahPokok}}{{end}}</td>
+        </tr>
+        {{else}}
+        <tr><td class="kosong" colspan="9">Belum ada rincian harian.</td></tr>
+        {{end}}
       </tbody>
       <tfoot>
-        <tr><th colspan="5">Jumlah</th><td>Rp 0</td><td></td><td>Rp 0</td><td>Rp 0</td></tr>
+        <tr>
+          <th colspan="5">Jumlah</th>
+          <td>Rp {{.Isi.TotalPotonganTelat}}</td>
+          <td></td>
+          <td>Rp {{.Isi.TotalUpahLembur}}</td>
+          <td>{{if .Isi.Bulanan}}-{{else}}Rp {{.Isi.TotalUpahPokok}}{{end}}</td>
+        </tr>
       </tfoot>
     </table>
   </div>
+  {{if .Isi.Bulanan}}
+  <p class="ket">Pekerja bulanan dibayar proporsional per segmen upah. Kolom upah pokok harian tidak dipakai.</p>
+  {{end}}
 </section>
 
 <section class="panel">
   <h2>Ringkasan</h2>
   <dl class="slip-meta">
-    <dt>Gaji bruto</dt><dd>Rp 0</dd>
-    <dt>Potongan kasbon</dt><dd>Rp 0</dd>
-    <dt>Gaji bersih</dt><dd>Rp 0</dd>
-    <dt>Sisa kasbon</dt><dd>Rp 0</dd>
+    <dt>Upah pokok</dt><dd>Rp {{.Isi.UpahPokok}}</dd>
+    <dt>Total lembur</dt><dd>Rp {{.Isi.TotalLembur}}</dd>
+    <dt>Potongan telat</dt><dd>Rp {{.Isi.TotalTelat}}</dd>
+    <dt>Koreksi</dt><dd>Rp {{.Isi.TotalKoreksi}}</dd>
+    <dt>Gaji bruto</dt><dd>Rp {{.Isi.GajiBruto}}</dd>
+    <dt>Potongan kasbon</dt><dd>Rp {{.Isi.PotonganKasbon}}</dd>
+    <dt>Gaji bersih</dt><dd>Rp {{.Isi.GajiBersih}}</dd>
+    <dt>Sisa kasbon</dt><dd>Rp {{.Isi.SisaKasbon}}</dd>
   </dl>
   <div class="aksi">
-    <form method="post" action="/penggajian/0/hitung-ulang">
+    <form method="post" action="/penggajian/{{.Isi.PeriodeID}}/hitung-ulang">
+      <input type="hidden" name="pekerja_id" value="{{.Isi.PekerjaID}}">
       <button class="btn btn-sekunder" type="submit">Hitung ulang</button>
     </form>
-    <a class="btn btn-sekunder" href="/penggajian">Kembali</a>
+    <a class="btn btn-sekunder" href="/penggajian?periode_id={{.Isi.PeriodeID}}">Kembali</a>
   </div>
 </section>
 
