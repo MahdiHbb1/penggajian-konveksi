@@ -2,7 +2,7 @@
 
 Rekap ini untuk laporan kampus. Sumber kebenaran harian tetap GitHub Projects.
 
-Terakhir diperbarui: 8 November 2026
+Terakhir diperbarui: 12 November 2026
 
 Repo: <https://github.com/MahdiHbb1/penggajian-konveksi> (privat)
 Project: <https://github.com/users/MahdiHbb1/projects/2>
@@ -12,7 +12,7 @@ Project: <https://github.com/users/MahdiHbb1/projects/2>
 | 1 Pekerja dan riwayat upah | Mahdi | `modul-1-pekerja` | [#1](https://github.com/MahdiHbb1/penggajian-konveksi/issues/1) | belum ada | In Progress | 33 tes lulus, 0 skip | 3, 4, 5 |
 | 2 Jadwal shift dan kasbon | Edgar | `modul-2-jadwal-kasbon` | [#2](https://github.com/MahdiHbb1/penggajian-konveksi/issues/2) | belum ada | Todo | 9 subtes skip | 6, 7, 8 |
 | 3 Absensi | Zahra | `modul-3-absensi` | [#3](https://github.com/MahdiHbb1/penggajian-konveksi/issues/3) | belum ada | Todo | 8 subtes skip | 9, 10 |
-| 4 Perhitungan gaji | Farah | `modul-4-penggajian` | [#4](https://github.com/MahdiHbb1/penggajian-konveksi/issues/4) | belum ada | Todo | 17 subtes skip | 11, 12 |
+| 4 Perhitungan gaji | Farah | `modul-4-penggajian` | [#4](https://github.com/MahdiHbb1/penggajian-konveksi/issues/4) | [#9](https://github.com/MahdiHbb1/penggajian-konveksi/pull/9) | In Progress | 25 tes lulus, 0 skip | 11, 12 |
 | 5 Periode, penutupan, koreksi | Anya | `modul-5-periode-koreksi` | [#5](https://github.com/MahdiHbb1/penggajian-konveksi/issues/5) | belum ada | Todo | 5 subtes skip | 13, 14, 15 |
 | 6 Slip, rekap, autentikasi, UI | Fadli | `modul-6-laporan-antarmuka` | [#6](https://github.com/MahdiHbb1/penggajian-konveksi/issues/6) | belum ada | Todo | 7 subtes skip | 1, 2, 16, 17 |
 
