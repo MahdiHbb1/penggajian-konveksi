@@ -42,6 +42,7 @@ func TestHitungMenitTerlambat(t *testing.T) {
 func TestHitungMenitLembur(t *testing.T) {
 	selesai := waktu(t, "2026-11-02", "15:00")
 	svc := NewService(nil)
+
 	kasus := []struct {
 		nama      string
 		jamKeluar time.Time

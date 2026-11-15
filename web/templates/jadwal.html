@@ -1,37 +1,60 @@
 {{define "konten"}}
 <!-- Pemilik: Edgar | Modul 2 -->
-<!-- TODO(Edgar): isi grid dari jadwal pekan terpilih dan sambungkan simpan serta salin. -->
 <section class="panel">
   <div class="aksi" style="justify-content: space-between;">
     <div class="aksi" style="margin-top:0;">
-      <a class="btn btn-sekunder" href="/jadwal?minggu=-1">Minggu sebelumnya</a>
-      <a class="btn btn-sekunder" href="/jadwal?minggu=1">Minggu berikutnya</a>
+      <a class="btn btn-sekunder" href="/jadwal?mulai={{.Isi.Sebelumnya}}">&larr; Minggu sebelumnya</a>
+      <a class="btn btn-sekunder" href="/jadwal?mulai={{.Isi.Berikutnya}}">Minggu berikutnya &rarr;</a>
     </div>
     <div class="aksi" style="margin-top:0;">
       <form method="post" action="/jadwal/salin">
+        <input type="hidden" name="mulai" value="{{.Isi.Mulai}}">
         <button class="btn btn-sekunder" type="submit">Salin dari minggu lalu</button>
       </form>
     </div>
   </div>
-  <p class="ket">Rentang tanggal: belum dipilih. Minggu tidak dijadwalkan. Salin tidak menimpa sel yang sudah terisi.</p>
+  <p class="ket">Pekan: {{.Isi.Rentang}} (Senin-Sabtu). Minggu tidak dijadwalkan. Salin tidak menimpa sel yang sudah terisi.</p>
 </section>
 
 <form method="post" action="/jadwal">
+  <input type="hidden" name="mulai" value="{{.Isi.Mulai}}">
   <section class="panel">
     <div class="tabel-wrap">
       <table class="grid-shift">
         <thead>
           <tr>
             <th>Pekerja</th>
-            <th>Senin</th><th>Selasa</th><th>Rabu</th><th>Kamis</th><th>Jumat</th><th>Sabtu</th>
+            {{range .Isi.Hari}}<th>{{.Nama}}<br><small>{{.Tanggal}}</small></th>{{end}}
           </tr>
         </thead>
         <tbody>
+          {{range .Isi.Baris}}
+          <tr>
+            <td>{{.Pekerja.Nama}}<br><small>{{.Pekerja.Kode}}</small></td>
+            {{range .Sel}}
+            {{$sel := .}}
+            <td>
+              <select name="{{.Nama}}" {{if .Terkunci}}disabled{{end}}>
+                <option value="">-</option>
+                {{range $.Isi.Shift}}
+                <option value="{{.ID}}" {{if eq .ID $sel.ShiftID}}selected{{end}}>{{.Nama}}</option>
+                {{end}}
+              </select>
+              {{if .Terkunci}}<small>terkunci</small>{{end}}
+            </td>
+            {{end}}
+          </tr>
+          {{else}}
           <tr><td class="kosong" colspan="7">Belum ada pekerja aktif untuk dijadwalkan.</td></tr>
+          {{end}}
         </tbody>
       </table>
     </div>
-    <p class="ket">Sel terkunci jika sudah ada absensi atau periode ditutup. Pilihan shift: Pagi, Siang, atau kosong.</p>
+    <p class="ket">
+      Shift:
+      {{range .Isi.Shift}}{{.Nama}} {{.JamMulai}}-{{.JamSelesai}}; {{end}}
+      Sel terkunci jika sudah ada absensi atau periode ditutup. Pilih "-" untuk membatalkan jadwal.
+    </p>
     <div class="aksi">
       <button class="btn" type="submit">Simpan jadwal</button>
     </div>

@@ -1,23 +1,25 @@
 {{define "konten"}}
 <!-- Pemilik: Edgar | Modul 2 -->
-<!-- TODO(Edgar): isi detail dan riwayat potongan dari service; aktifkan simpan. -->
 <div class="dua-kolom">
   <section class="panel">
-    <h2>Kasbon</h2>
+    <h2>Catat kasbon</h2>
     <form method="post" action="/kasbon/baru">
       <label>Pekerja aktif
         <select name="pekerja_id" required>
           <option value="">Pilih pekerja</option>
+          {{range .Isi.Pekerja}}
+          <option value="{{.ID}}" {{if eq .ID $.Isi.PekerjaID}}selected{{end}}>{{.Kode}} - {{.Nama}}</option>
+          {{end}}
         </select>
       </label>
       <label style="margin-top:12px;">Tanggal
-        <input type="date" name="tanggal" required>
+        <input type="date" name="tanggal" value="{{.Isi.Tanggal}}" required>
       </label>
       <label style="margin-top:12px;">Jumlah (rupiah)
-        <input type="number" name="jumlah" min="1" step="1" required>
+        <input type="number" name="jumlah" min="1" step="1" value="{{.Isi.Jumlah}}" required>
       </label>
       <label style="margin-top:12px;">Keterangan
-        <input type="text" name="keterangan" maxlength="150">
+        <input type="text" name="keterangan" maxlength="150" value="{{.Isi.Keterangan}}">
       </label>
       <div class="aksi">
         <button class="btn" type="submit">Simpan kasbon</button>
@@ -27,23 +29,38 @@
   </section>
 
   <aside class="panel">
-    <h2>Ringkasan</h2>
+    {{with .Isi.Detail}}
+    <h2>Detail kasbon: {{.Pekerja}}, {{.Tanggal}}</h2>
     <dl class="slip-meta">
-      <dt>Jumlah kasbon</dt><dd>Rp 0</dd>
-      <dt>Sisa</dt><dd>Rp 0</dd>
+      <dt>Jumlah kasbon</dt><dd>Rp {{.Jumlah}}</dd>
+      <dt>Sisa</dt><dd>Rp {{.Sisa}}</dd>
+      <dt>Status</dt><dd>{{.Status}}</dd>
+      {{if .Keterangan}}<dt>Keterangan</dt><dd>{{.Keterangan}}</dd>{{end}}
     </dl>
     <h3>Riwayat potongan</h3>
     <div class="tabel-wrap">
       <table>
         <thead>
-          <tr><th>Periode</th><th>Dipotong</th><th>Sisa</th></tr>
+          <tr><th>Periode</th><th>Dipotong (Rp)</th><th>Sisa (Rp)</th></tr>
         </thead>
         <tbody>
+          {{range .Potongan}}
+          <tr>
+            <td>{{.Periode}}<br><small>{{.Status}}</small></td>
+            <td>{{.Dipotong}}</td>
+            <td>{{.Sisa}}</td>
+          </tr>
+          {{else}}
           <tr><td class="kosong" colspan="3">Belum ada potongan.</td></tr>
+          {{end}}
         </tbody>
       </table>
     </div>
-    <p class="ket">Sisa diperbarui saat periode ditutup.</p>
+    <p class="ket">Riwayat potongan berasal dari slip gaji. Sisa kasbon diperbarui saat periode ditutup.</p>
+    {{else}}
+    <h2>Detail kasbon</h2>
+    <p class="ket">Pilih kasbon dari <a href="/kasbon">daftar kasbon</a> untuk melihat riwayat potongannya.</p>
+    {{end}}
   </aside>
 </div>
 
