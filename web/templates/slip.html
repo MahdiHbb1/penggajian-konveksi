@@ -1,6 +1,7 @@
 {{define "konten"}}
 <!-- Pemilik: Fadli | Modul 6 -->
-<!-- TODO(Fadli): isi slip dari Service.AmbilSlipGaji, bukan hitung ulang. -->
+{{with .Isi}}
+{{$slip := .Slip}}
 <article class="slip">
   <header class="slip-head">
     <div>
@@ -9,54 +10,140 @@
     </div>
     <div>
       <strong>SLIP GAJI</strong>
+      {{if $slip.Periode}}
+      <p>Periode: {{$slip.Periode.TanggalMulai.Format "02 Jan 2006"}} – {{$slip.Periode.TanggalSelesai.Format "02 Jan
+        2006"}}</p>
+      <p>Status: {{$slip.Periode.Status}}</p>
+      {{else}}
       <p>Periode: -</p>
       <p>Status: -</p>
+      {{end}}
     </div>
   </header>
 
   <dl class="slip-meta">
-    <div><dt>Nama</dt><dd>-</dd></div>
-    <div><dt>Kode</dt><dd>-</dd></div>
-    <div><dt>Jenis</dt><dd>-</dd></div>
-    <div><dt>Periode</dt><dd>-</dd></div>
+    {{if $slip.Pekerja}}
+    <div>
+      <dt>Nama</dt>
+      <dd>{{$slip.Pekerja.Nama}}</dd>
+    </div>
+    <div>
+      <dt>Kode</dt>
+      <dd>{{$slip.Pekerja.Kode}}</dd>
+    </div>
+    <div>
+      <dt>Jenis</dt>
+      <dd>{{$slip.Pekerja.Jenis}}</dd>
+    </div>
+    {{else}}
+    <div>
+      <dt>Nama</dt>
+      <dd>-</dd>
+    </div>
+    <div>
+      <dt>Kode</dt>
+      <dd>-</dd>
+    </div>
+    <div>
+      <dt>Jenis</dt>
+      <dd>-</dd>
+    </div>
+    {{end}}
+    <div>
+      <dt>Hari Kerja Dibayar</dt>
+      <dd>{{$slip.HariKerjaDibayar}} hari</dd>
+    </div>
   </dl>
 
+  <h2>Ringkasan Penggajian</h2>
   <div class="tabel-wrap">
     <table>
       <thead>
-        <tr><th>Komponen</th><th>Keterangan</th><th>Jumlah</th></tr>
+        <tr>
+          <th>Komponen</th>
+          <th>Keterangan</th>
+          <th>Jumlah</th>
+        </tr>
       </thead>
       <tbody>
-        <tr><td>Upah pokok</td><td>Harian: hari x tarif; bulanan: proporsional</td><td>Rp 0</td></tr>
-        <tr><td>Lembur</td><td>60 menit pertama 1,5x, berikutnya 2x</td><td>Rp 0</td></tr>
-        <tr><td>Potongan keterlambatan</td><td>Lebih dari 15 menit</td><td>Rp 0</td></tr>
-        <tr><td>Koreksi</td><td>Koreksi periode sebelumnya</td><td>Rp 0</td></tr>
-        <tr><th>Gaji bruto</th><td></td><th>Rp 0</th></tr>
-        <tr><td>Potongan kasbon</td><td>Maksimum 30% bruto</td><td>Rp 0</td></tr>
-        <tr><th>Gaji bersih</th><td></td><th>Rp 0</th></tr>
+        <tr>
+          <td>Upah pokok</td>
+          <td>Harian atau bulanan</td>
+          <td>Rp {{$slip.UpahPokok}}</td>
+        </tr>
+        <tr>
+          <td>Lembur</td>
+          <td>Total upah lembur</td>
+          <td>Rp {{$slip.TotalLembur}}</td>
+        </tr>
+        <tr>
+          <td>Potongan keterlambatan</td>
+          <td>Potongan keterlambatan</td>
+          <td>Rp {{$slip.PotonganTelat}}</td>
+        </tr>
+        <tr>
+          <td>Koreksi</td>
+          <td>Koreksi periode sebelumnya</td>
+          <td>Rp {{$slip.TotalKoreksi}}</td>
+        </tr>
+        <tr>
+          <th>Gaji bruto</th>
+          <td></td>
+          <th>Rp {{$slip.GajiBruto}}</th>
+        </tr>
+        <tr>
+          <td>Potongan kasbon</td>
+          <td>Potongan kasbon</td>
+          <td>Rp {{$slip.PotonganKasbon}}</td>
+        </tr>
+        <tr>
+          <th>Gaji bersih</th>
+          <td></td>
+          <th>Rp {{$slip.GajiBersih}}</th>
+        </tr>
       </tbody>
     </table>
   </div>
 
-  <h2 style="margin-top:22px;">Rincian harian</h2>
+  <h2>Rincian Penggajian Harian</h2>
+  {{if .Rincian}}
   <div class="tabel-wrap">
     <table>
       <thead>
-        <tr><th>Tanggal</th><th>Telat</th><th>Lembur</th><th>Pokok</th></tr>
+        <tr>
+          <th>Tanggal</th>
+          <th>Upah Pokok</th>
+          <th>Menit Telat</th>
+          <th>Potongan Telat</th>
+          <th>Menit Lembur</th>
+          <th>Upah Lembur</th>
+        </tr>
       </thead>
       <tbody>
-        <tr><td class="kosong" colspan="4">Belum ada rincian.</td></tr>
+        {{range .Rincian}}
+        <tr>
+          <td>{{.Tanggal.Format "02 Jan 2006"}}</td>
+          <td>Rp {{.UpahPokokHari}}</td>
+          <td>{{.MenitTelat}} menit</td>
+          <td>Rp {{.PotonganTelat}}</td>
+          <td>{{.MenitLembur}} menit</td>
+          <td>Rp {{.UpahLembur}}</td>
+        </tr>
+        {{end}}
       </tbody>
     </table>
   </div>
-
-  <p><strong>Sisa kasbon:</strong> Rp 0</p>
+  {{else}}
+  <p class="kosong">Belum ada rincian penggajian harian untuk slip ini.</p>
+  {{end}}
 
   <div class="aksi no-print">
     <button class="btn" type="button" onclick="window.print()">Cetak</button>
     <a class="btn btn-sekunder" href="/dashboard">Kembali</a>
   </div>
 </article>
-
+{{else}}
+<p class="kosong">Pilih periode dan pekerja untuk menampilkan slip gaji.</p>
+{{end}}
 <p class="owner no-print">Pemilik: Fadli | Modul 6</p>
 {{end}}
