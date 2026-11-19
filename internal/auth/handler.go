@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 
 	"penggajian-konveksi/internal/web"
@@ -29,19 +30,74 @@ func DaftarkanRute(mux *http.ServeMux, renderer web.Renderer, service *Service) 
 
 // Login menampilkan kartu masuk tanpa navigasi.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	// Bila sudah login, langsung ke dashboard.
+	if pengguna := web.PenggunaDariContext(r.Context()); pengguna != nil {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
 	h.renderer.Render(w, r, "login.html", web.Data{Judul: "Masuk", Polos: true})
 }
 
-// ProsesLogin adalah placeholder autentikasi.
+// ProsesLogin memvalidasi credential dan membuat sesi.
 func (h *Handler) ProsesLogin(w http.ResponseWriter, r *http.Request) {
-	h.renderer.Render(w, r, "login.html", web.Data{
-		Judul: "Masuk",
-		Polos: true,
-		Info:  "Autentikasi belum diimplementasikan pada kerangka.",
+	if err := r.ParseForm(); err != nil {
+		h.renderer.Render(w, r, "login.html", web.Data{
+			Judul: "Masuk",
+			Polos: true,
+			Galat: "Gagal membaca formulir.",
+		})
+		return
+	}
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	pengguna, err := h.service.Login(r.Context(), username, password)
+	if err != nil {
+		pesan := "Terjadi kesalahan sistem."
+		if errors.Is(err, ErrCredentialSalah) {
+			pesan = "Username atau password salah."
+		}
+		h.renderer.Render(w, r, "login.html", web.Data{
+			Judul: "Masuk",
+			Polos: true,
+			Galat: pesan,
+		})
+		return
+	}
+
+	sessionID, err := BuatSesi(pengguna)
+	if err != nil {
+		h.renderer.Render(w, r, "login.html", web.Data{
+			Judul: "Masuk",
+			Polos: true,
+			Galat: "Gagal membuat sesi. Coba lagi.",
+		})
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     namaCookie,
+		Value:    sessionID,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   int(durasisesi.Seconds()),
 	})
+	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }
 
-// Logout mengarahkan pengguna kembali ke halaman login.
+// Logout menghapus sesi dan mengarahkan ke halaman login.
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(namaCookie); err == nil {
+		_ = h.service.Logout(r.Context(), cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     namaCookie,
+		Value:    "",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

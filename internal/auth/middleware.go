@@ -8,43 +8,63 @@ import (
 	"penggajian-konveksi/internal/web"
 )
 
+const namaCookie = "sesi_penggajian"
+
+// halamanPublik adalah rute yang tidak memerlukan login.
+var halamanPublik = map[string]bool{
+	"/login": true,
+}
+
 // MiddlewareAuth memasang pengguna pada context request.
-//
-// Masukan: handler berikutnya.
-// Hasil: handler yang sudah membawa pengguna.
-// Aturan: semua halaman selain /login memerlukan sesi sah.
-// Tabel: pengguna (nanti).
-// Memanggil: web.DenganPengguna.
-//
-// TODO(Fadli): ganti dengan sesi bcrypt dan pengecekan peran.
-//
-// PERINGATAN: versi kerangka ini meloloskan semua request dengan pengguna
-// palsu berperan Admin supaya 17 halaman bisa diperiksa. Bypass ini hanya
-// untuk mode kerangka dan tidak boleh dipakai di aplikasi akhir.
+// Semua halaman kecuali /login memerlukan sesi sah.
+// Bila tidak ada sesi, redirect ke /login.
 func MiddlewareAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pengguna := &domain.Pengguna{
-			ID:       0,
-			Username: "kerangka",
-			Role:     domain.PeranAdmin,
+		if halamanPublik[r.URL.Path] {
+			next.ServeHTTP(w, r)
+			return
 		}
+
+		// Ambil cookie sesi.
+		cookie, err := r.Cookie(namaCookie)
+		if err != nil {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		pengguna := AmbilSesi(cookie.Value)
+		if pengguna == nil {
+			// Hapus cookie kedaluwarsa.
+			http.SetCookie(w, &http.Cookie{
+				Name:     namaCookie,
+				Value:    "",
+				MaxAge:   -1,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+				Path:     "/",
+			})
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
 		next.ServeHTTP(w, r.WithContext(web.DenganPengguna(r.Context(), pengguna)))
 	})
 }
 
 // MiddlewarePeran membatasi akses berdasarkan peran.
-//
-// Masukan: daftar peran yang diizinkan.
-// Hasil: middleware.
-// Aturan: Admin mengelola data, Pemilik hanya melihat.
-// Tabel: tidak ada.
-// Memanggil: web.PenggunaDariContext.
-//
-// TODO(Fadli): tolak request dengan pesan "Anda tidak memiliki akses ke halaman ini."
-// Versi kerangka saat ini meloloskan semua peran.
+// Bila pengguna tidak memiliki peran yang diizinkan, kembalikan 403.
 func MiddlewarePeran(peran ...domain.Peran) func(http.Handler) http.Handler {
+	diizinkan := make(map[domain.Peran]bool, len(peran))
+	for _, p := range peran {
+		diizinkan[p] = true
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pengguna := web.PenggunaDariContext(r.Context())
+			if pengguna == nil || !diizinkan[pengguna.Role] {
+				http.Error(w, "Anda tidak memiliki akses ke halaman ini.", http.StatusForbidden)
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

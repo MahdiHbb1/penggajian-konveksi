@@ -1,12 +1,13 @@
 {{define "konten"}}
 <!-- Pemilik: Fadli | Modul 6 -->
-<!-- TODO(Fadli): ganti placeholder dengan Service.Login, sesi HttpOnly, dan pesan galat. -->
 <section class="auth-card">
   <h1>Masuk</h1>
   <p>Sistem Penggajian Konveksi Mitra Jaya</p>
+  {{if .Galat}}<div class="alert alert-error" role="alert">{{.Galat}}</div>{{end}}
+  {{if .Info}}<div class="alert alert-info" role="status">{{.Info}}</div>{{end}}
   <form method="post" action="/login">
     <label>Username
-      <input type="text" name="username" autocomplete="username" required>
+      <input type="text" name="username" autocomplete="username" required autofocus>
     </label>
     <label>Password
       <input type="password" name="password" autocomplete="current-password" required>

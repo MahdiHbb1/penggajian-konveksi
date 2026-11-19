@@ -1,24 +1,12 @@
 {{define "konten"}}
 <!-- Pemilik: Fadli | Modul 6 -->
-<!-- TODO(Fadli): isi kartu dan dua tabel dari Service.RekapGajiPerPeriode. -->
-<section class="panel">
-  <form class="form-grid" method="get" action="">
-    <label>Periode
-      <select name="periode_id" required>
-        <option value="">Pilih periode</option>
-      </select>
-    </label>
-    <div class="aksi">
-      <button class="btn" type="submit">Tampilkan rekap</button>
-    </div>
-  </form>
-</section>
-
+{{with .Isi}}
+{{$isi := .}}
 <section class="card-grid" aria-label="Ringkasan rekap">
-  <article class="card"><h2>Biaya gaji bruto</h2><p class="angka">Rp 0</p></article>
-  <article class="card"><h2>Total lembur</h2><p class="angka">Rp 0</p></article>
-  <article class="card"><h2>Total potongan kasbon</h2><p class="angka">Rp 0</p></article>
-  <article class="card"><h2>Gaji dibayarkan</h2><p class="angka">Rp 0</p></article>
+  <article class="card"><h2>Biaya gaji bruto</h2><p class="angka">Rp {{$isi.Rekap.TotalBruto}}</p></article>
+  <article class="card"><h2>Total lembur</h2><p class="angka">Rp {{$isi.Rekap.TotalLembur}}</p></article>
+  <article class="card"><h2>Total potongan kasbon</h2><p class="angka">Rp {{$isi.Rekap.TotalPotonganKasbon}}</p></article>
+  <article class="card"><h2>Gaji dibayarkan</h2><p class="angka">Rp {{$isi.Rekap.TotalBersih}}</p></article>
 </section>
 
 <section class="panel">
@@ -29,7 +17,18 @@
         <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan</th><th>Bersih</th><th>Aksi</th></tr>
       </thead>
       <tbody>
+        {{range $isi.Harian}}
+        <tr>
+          <td>{{if .Pekerja}}{{.Pekerja.Nama}}{{else}}-{{end}}</td>
+          <td>Rp {{.TotalLembur}}</td>
+          <td>Rp {{.GajiBruto}}</td>
+          <td>Rp {{.PotonganKasbon}}</td>
+          <td>Rp {{.GajiBersih}}</td>
+          <td><a href="/slip/{{.PeriodeID}}/{{.PekerjaID}}">Lihat slip</a></td>
+        </tr>
+        {{else}}
         <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+        {{end}}
       </tbody>
     </table>
   </div>
@@ -43,12 +42,28 @@
         <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan</th><th>Bersih</th><th>Aksi</th></tr>
       </thead>
       <tbody>
+        {{range $isi.Bulanan}}
+        <tr>
+          <td>{{if .Pekerja}}{{.Pekerja.Nama}}{{else}}-{{end}}</td>
+          <td>Rp {{.TotalLembur}}</td>
+          <td>Rp {{.GajiBruto}}</td>
+          <td>Rp {{.PotonganKasbon}}</td>
+          <td>Rp {{.GajiBersih}}</td>
+          <td><a href="/slip/{{.PeriodeID}}/{{.PekerjaID}}">Lihat slip</a></td>
+        </tr>
+        {{else}}
         <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+        {{end}}
       </tbody>
     </table>
   </div>
-  {{if .Pemilik}}<p class="ket">Tampilan Pemilik hanya baca.</p>{{end}}
+  {{if $.Pemilik}}<p class="ket">Tampilan Pemilik hanya baca.</p>{{end}}
 </section>
+{{else}}
+<section class="panel">
+  <p class="kosong">Pilih periode dari menu navigasi untuk menampilkan rekap.</p>
+</section>
+{{end}}
 
 <p class="owner">Pemilik: Fadli | Modul 6</p>
 {{end}}

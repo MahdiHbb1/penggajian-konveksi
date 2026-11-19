@@ -2,10 +2,9 @@
 package main
 
 import (
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
-	"time"
-
 	"penggajian-konveksi/internal/absensi"
 	"penggajian-konveksi/internal/auth"
 	"penggajian-konveksi/internal/config"
@@ -17,9 +16,13 @@ import (
 	"penggajian-konveksi/internal/penggajian"
 	"penggajian-konveksi/internal/periode"
 	"penggajian-konveksi/internal/web"
+	"time"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Peringatan: file .env tidak ditemukan: %v", err)
+	}
 	cfg := config.Muat()
 
 	db, err := database.Buka(cfg.DSN)
