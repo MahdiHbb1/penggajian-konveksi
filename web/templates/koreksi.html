@@ -1,47 +1,57 @@
-{{define "konten"}}
 <!-- Pemilik: Anya | Modul 5 -->
-<!-- TODO(Anya): isi tabel dari Service.DaftarKoreksi dan form ke CatatKoreksi. -->
+{{define "konten"}}
 <div class="dua-kolom">
   <section class="panel">
     <h2>Daftar koreksi</h2>
     <div class="tabel-wrap">
       <table>
         <thead>
-          <tr><th>Tanggal</th><th>Pekerja</th><th>Periode asal</th><th>Nominal</th><th>Status</th><th>Periode penerapan</th></tr>
+          <tr><th>Tanggal</th><th>ID pekerja</th><th>Periode asal</th><th>Nominal</th><th>Alasan</th><th>Status</th><th>Periode penerapan</th></tr>
         </thead>
         <tbody>
-          <tr><td class="kosong" colspan="6">Belum ada data.</td></tr>
+          {{range .Isi.Koreksi}}
+          <tr>
+            <td>{{.DibuatPada.Format "02-01-2006"}}</td>
+            <td>{{.PekerjaID}}</td>
+            <td>{{.PeriodeAsalID}}</td>
+            <td>Rp {{.Jumlah}}</td>
+            <td>{{.Keterangan}}</td>
+            <td>{{.Status}}</td>
+            <td>{{if .PeriodeTerapanID}}{{.PeriodeTerapanID}}{{else}}—{{end}}</td>
+          </tr>
+          {{else}}
+          <tr><td class="kosong" colspan="7">Belum ada data koreksi.</td></tr>
+          {{end}}
         </tbody>
       </table>
     </div>
   </section>
-
   <section class="panel">
     <h2>Koreksi baru</h2>
     <form method="post" action="/koreksi/baru">
       <label>Pekerja
         <select name="pekerja_id" required>
           <option value="">Pilih pekerja</option>
+          {{range .Isi.Pekerja}}<option value="{{.ID}}">{{.Kode}} — {{.Nama}}</option>{{end}}
         </select>
       </label>
-      <label style="margin-top:12px;">Periode asal
+      <label style="margin-top:12px">Periode asal
         <select name="periode_asal_id" required>
           <option value="">Pilih periode yang sudah ditutup</option>
+          {{range .Isi.Periode}}{{if eq .Status "DITUTUP"}}<option value="{{.ID}}">{{.Tipe}}: {{.TanggalMulai.Format "02-01-2006"}} – {{.TanggalSelesai.Format "02-01-2006"}}</option>{{end}}{{end}}
         </select>
       </label>
-      <label style="margin-top:12px;">Nominal (boleh negatif)
+      <label style="margin-top:12px">Nominal (boleh negatif)
         <input type="number" name="jumlah" step="1" required>
       </label>
-      <label style="margin-top:12px;">Alasan
+      <label style="margin-top:12px">Alasan
         <textarea name="keterangan" maxlength="200" required></textarea>
       </label>
-      <p class="ket">Koreksi masuk ke slip periode berikutnya. Status Menunggu sampai periode penerapan dihitung.</p>
-      <div class="aksi">
-        <button class="btn" type="submit">Simpan koreksi</button>
-      </div>
+      <p class="ket">Koreksi hanya dapat dicatat untuk periode yang sudah ditutup. Koreksi menunggu akan masuk ke slip periode berikutnya satu kali.</p>
+      <div class="aksi"><button class="btn" type="submit">Simpan koreksi</button></div>
     </form>
+    <p><a href="/periode">Kembali ke periode</a></p>
   </section>
 </div>
-
 <p class="owner">Pemilik: Anya | Modul 5</p>
 {{end}}
