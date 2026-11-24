@@ -5,14 +5,13 @@
 <article class="slip">
   <header class="slip-head">
     <div>
-      <h1>Konveksi Mitra Jaya</h1>
-      <p>Slip Gaji Pekerja</p>
+      <h2>Konveksi Mitra Jaya</h2>
+      <p>Slip gaji dari data tersimpan</p>
     </div>
     <div>
       <strong>SLIP GAJI</strong>
       {{if $slip.Periode}}
-      <p>Periode: {{$slip.Periode.TanggalMulai.Format "02 Jan 2006"}} – {{$slip.Periode.TanggalSelesai.Format "02 Jan
-        2006"}}</p>
+      <p>Periode: {{$slip.Periode.TanggalMulai.Format "02 Jan 2006"}} – {{$slip.Periode.TanggalSelesai.Format "02 Jan 2006"}}</p>
       <p>Status: {{$slip.Periode.Status}}</p>
       {{else}}
       <p>Periode: -</p>
@@ -51,7 +50,7 @@
     {{end}}
     <div>
       <dt>Hari Kerja Dibayar</dt>
-      <dd>{{$slip.HariKerjaDibayar}} hari</dd>
+      <dd>{{if gt $slip.HariKerjaPeriode 0}}{{$slip.HariKerjaDibayar}} / {{$slip.HariKerjaPeriode}} hari{{else}}{{$slip.HariKerjaDibayar}} hari{{end}}</dd>
     </div>
   </dl>
 
@@ -69,37 +68,37 @@
         <tr>
           <td>Upah pokok</td>
           <td>Harian atau bulanan</td>
-          <td>Rp {{$slip.UpahPokok}}</td>
+          <td>{{rupiah $slip.UpahPokok}}</td>
         </tr>
         <tr>
           <td>Lembur</td>
           <td>Total upah lembur</td>
-          <td>Rp {{$slip.TotalLembur}}</td>
+          <td>{{rupiah $slip.TotalLembur}}</td>
         </tr>
         <tr>
           <td>Potongan keterlambatan</td>
-          <td>Potongan keterlambatan</td>
-          <td>Rp {{$slip.PotonganTelat}}</td>
+          <td>Potongan keterlambatan (sudah dikurangi pada gaji bruto)</td>
+          <td>{{rupiah $slip.PotonganTelat}}</td>
         </tr>
         <tr>
           <td>Koreksi</td>
           <td>Koreksi periode sebelumnya</td>
-          <td>Rp {{$slip.TotalKoreksi}}</td>
+          <td>{{rupiah $slip.TotalKoreksi}}</td>
         </tr>
         <tr>
           <th>Gaji bruto</th>
           <td></td>
-          <th>Rp {{$slip.GajiBruto}}</th>
+          <th>{{rupiah $slip.GajiBruto}}</th>
         </tr>
         <tr>
           <td>Potongan kasbon</td>
-          <td>Potongan kasbon</td>
-          <td>Rp {{$slip.PotonganKasbon}}</td>
+          <td>Maksimum 30% gaji bruto</td>
+          <td>{{rupiah $slip.PotonganKasbon}}</td>
         </tr>
         <tr>
           <th>Gaji bersih</th>
           <td></td>
-          <th>Rp {{$slip.GajiBersih}}</th>
+          <th>{{rupiah $slip.GajiBersih}}</th>
         </tr>
       </tbody>
     </table>
@@ -123,11 +122,11 @@
         {{range .Rincian}}
         <tr>
           <td>{{.Tanggal.Format "02 Jan 2006"}}</td>
-          <td>Rp {{.UpahPokokHari}}</td>
+          <td>{{rupiah .UpahPokokHari}}</td>
           <td>{{.MenitTelat}} menit</td>
-          <td>Rp {{.PotonganTelat}}</td>
+          <td>{{rupiah .PotonganTelat}}</td>
           <td>{{.MenitLembur}} menit</td>
-          <td>Rp {{.UpahLembur}}</td>
+          <td>{{rupiah .UpahLembur}}</td>
         </tr>
         {{end}}
       </tbody>
@@ -137,9 +136,12 @@
   <p class="kosong">Belum ada rincian penggajian harian untuk slip ini.</p>
   {{end}}
 
+  <p style="margin-top:16px;"><strong>Sisa kasbon berjalan:</strong> {{rupiah .SisaKasbon}}</p>
+
   <div class="aksi no-print">
     <button class="btn" type="button" onclick="window.print()">Cetak</button>
-    <a class="btn btn-sekunder" href="/dashboard">Kembali</a>
+    <a class="btn btn-sekunder" href="/rekap/{{$slip.PeriodeID}}">Kembali ke Rekap</a>
+    <a class="btn btn-sekunder" href="/dashboard">Dashboard</a>
   </div>
 </article>
 {{else}}

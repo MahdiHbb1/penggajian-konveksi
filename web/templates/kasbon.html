@@ -4,6 +4,7 @@
   <section class="panel">
     <h2>Catat kasbon</h2>
     <form method="post" action="/kasbon/baru">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <label>Pekerja aktif
         <select name="pekerja_id" required>
           <option value="">Pilih pekerja</option>

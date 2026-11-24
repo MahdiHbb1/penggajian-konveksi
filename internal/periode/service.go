@@ -72,7 +72,7 @@ func (s *Service) BuatPeriode(ctx context.Context, tipe domain.TipePeriode, mula
 		return 0, e
 	}
 	if ada {
-		return 0, errors.New("periode bertumpang tindih dengan periode yang sudah ada")
+		return 0, ErrPeriodeTumpangTindih
 	}
 	if e = s.repo.SimpanPeriode(ctx, &p); e != nil {
 		return 0, e
@@ -102,6 +102,15 @@ func (s *Service) PeriksaPeriodeTerkunci(c context.Context, t time.Time) (bool, 
 		return false, e
 	}
 	return s.repo.PeriodeTerkunci(c, t)
+}
+
+// PeriksaPeriodeTerkunciJenis menunjukkan apakah tanggal berada di periode DITUTUP
+// yang sesuai jenis pekerja (HARIAN -> MINGGUAN, BULANAN -> BULANAN).
+func (s *Service) PeriksaPeriodeTerkunciJenis(c context.Context, jenis domain.JenisPekerja, t time.Time) (bool, error) {
+	if e := s.siap(); e != nil {
+		return false, e
+	}
+	return s.repo.PeriodeTerkunciJenis(c, jenis, t)
 }
 
 // PeriodeSebelumnyaDitutup bernilai benar bila periode sebelumnya sudah ditutup.

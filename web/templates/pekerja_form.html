@@ -2,6 +2,7 @@
 <!-- Pemilik: Mahdi | Modul 1 -->
 <section class="panel">
   <form class="form-grid" method="post" action="{{.Isi.Aksi}}">
+    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
     <label>Kode pekerja
       <input type="text" name="kode" maxlength="20" required placeholder="P-001" value="{{.Isi.Kode}}">
     </label>

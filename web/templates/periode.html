@@ -21,6 +21,7 @@
               <span class="ket">Selesai</span>
               {{else}}
               <form method="post" action="/periode/{{.ID}}/hitung" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-kecil" type="submit">{{if eq .Status "DIHITUNG"}}Hitung ulang{{else}}Hitung gaji{{end}}</button>
               </form>
               {{if eq .Status "DIHITUNG"}}
@@ -39,6 +40,7 @@
   <section class="panel">
     <h2>Buat periode</h2>
     <form method="post" action="/periode/baru">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <label>Tipe
         <select name="tipe" required>
           <option value="MINGGUAN">Mingguan</option>

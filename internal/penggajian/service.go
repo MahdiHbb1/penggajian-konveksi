@@ -189,13 +189,8 @@ func (s *Service) HitungGajiPeriode(ctx context.Context, periodeID int64) error 
 		}
 	}
 
-	if err := s.repo.SimpanHasilPeriode(ctx, periodeID, hasil); err != nil {
-		return err
-	}
-	if err := s.tandaiKoreksiDiterapkan(ctx, periodeID); err != nil {
-		return err
-	}
-	return s.ubahStatusPeriode(ctx, periodeID, domain.PeriodeDihitung)
+	// Simpan slip, ikat koreksi terhitung, dan ubah status menjadi DIHITUNG dalam satu transaksi atomik.
+	return s.repo.SimpanHasilPeriode(ctx, periodeID, hasil)
 }
 
 // PeriksaPrasyaratHitung memeriksa syarat hitung gaji.
@@ -389,8 +384,8 @@ func (s *Service) hitungPekerja(
 
 		nominal := upahPadaTanggal(riwayatUpah, tanggal)
 		upahPerJam := HitungUpahPerJam(nominal, pekerja.Jenis)
-		menitTelat := hitungMenitTerlambat(a.Absensi.JamMasuk, shiftMulai)
-		menitLembur := hitungMenitLembur(*a.Absensi.JamKeluar, shiftSelesai)
+		menitTelat := s.menitTerlambat(a.Absensi.JamMasuk, shiftMulai)
+		menitLembur := s.menitLembur(*a.Absensi.JamKeluar, shiftSelesai)
 
 		detail := domain.SlipGajiDetail{
 			AbsensiID:     a.Absensi.ID,
@@ -442,8 +437,12 @@ func (s *Service) hitungPekerja(
 		return HasilHitung{}, false, err
 	}
 	var totalKoreksi domain.Rupiah
+	koreksiIDs := make([]int64, 0, len(koreksi))
 	for _, k := range koreksi {
 		totalKoreksi += k.Jumlah
+		if k.ID > 0 {
+			koreksiIDs = append(koreksiIDs, k.ID)
+		}
 	}
 
 	bruto := HitungGajiBruto(pokok, totalLembur, potonganTelat, totalKoreksi)
@@ -469,7 +468,7 @@ func (s *Service) hitungPekerja(
 		Pekerja:          &pekerja,
 		Periode:          &periode,
 	}
-	return HasilHitung{Slip: slip, Rincian: rincian, Potongan: potonganKasbon}, true, nil
+	return HasilHitung{Slip: slip, Rincian: rincian, Potongan: potonganKasbon, KoreksiIDs: koreksiIDs}, true, nil
 }
 
 func segmenUpahBulanan(periode domain.PeriodeGaji, mulai, selesai time.Time, riwayat []domain.Upah) []SegmenUpah {
@@ -544,9 +543,22 @@ func akhirBulan(t time.Time) time.Time {
 	return awalBulan(t).AddDate(0, 1, -1)
 }
 
-// hitungMenitTerlambat dan hitungMenitLembur adalah salinan aturan Modul 3.
-// AbsensiProvider sudah dipakai untuk data absensi, tetapi kedua metode menit
-// di Modul 3 masih kerangka; helper ini menjaga hasil Modul 4 tetap benar.
+// menitTerlambat mendelegasikan ke AbsensiProvider (Modul 3) bila tersedia.
+func (s *Service) menitTerlambat(jamMasuk, jamMulaiShift time.Time) int {
+	if s.absensi != nil {
+		return s.absensi.HitungMenitTerlambat(jamMasuk, jamMulaiShift)
+	}
+	return hitungMenitTerlambat(jamMasuk, jamMulaiShift)
+}
+
+// menitLembur mendelegasikan ke AbsensiProvider (Modul 3) bila tersedia.
+func (s *Service) menitLembur(jamKeluar, jamSelesaiShift time.Time) int {
+	if s.absensi != nil {
+		return s.absensi.HitungMenitLembur(jamKeluar, jamSelesaiShift)
+	}
+	return hitungMenitLembur(jamKeluar, jamSelesaiShift)
+}
+
 func hitungMenitTerlambat(jamMasuk, jamMulaiShift time.Time) int {
 	if !jamMasuk.After(jamMulaiShift) {
 		return 0

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -18,9 +19,13 @@ const durasisesi = 8 * time.Hour
 // intervalBersihSesi adalah seberapa sering goroutine pembersih berjalan.
 const intervalBersihSesi = 30 * time.Minute
 
-// entriSesi menyimpan data pengguna dan waktu kedaluwarsa.
+// maxSesiAktif membatasi jumlah sesi in-memory agar tidak terjadi kebocoran memori.
+const maxSesiAktif = 10000
+
+// entriSesi menyimpan data pengguna, token CSRF terikat sesi, dan waktu kedaluwarsa.
 type entriSesi struct {
 	pengguna    domain.Pengguna
+	csrfToken   string
 	kedaluwarsa time.Time
 }
 
@@ -29,25 +34,53 @@ var (
 	storeSesi = make(map[string]entriSesi)
 )
 
-// BuatSesi membuat ID sesi acak dan menyimpan pengguna di store.
-func BuatSesi(pengguna domain.Pengguna) (string, error) {
+func buatTokenAcakHex() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	id := hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
+}
 
+// BuatSesi membuat ID sesi acak beserta token CSRF terikat sesi di store.
+func BuatSesi(pengguna domain.Pengguna) (string, error) {
+	id, err := buatTokenAcakHex()
+	if err != nil {
+		return "", err
+	}
+	csrfToken, err := buatTokenAcakHex()
+	if err != nil {
+		return "", err
+	}
+
+	sekarang := time.Now()
 	muSesi.Lock()
+	defer muSesi.Unlock()
+
+	if len(storeSesi) >= maxSesiAktif {
+		for sid, e := range storeSesi {
+			if sekarang.After(e.kedaluwarsa) {
+				delete(storeSesi, sid)
+			}
+		}
+		if len(storeSesi) >= maxSesiAktif {
+			return "", errors.New("kapasitas sesi aktif penuh")
+		}
+	}
+
 	storeSesi[id] = entriSesi{
 		pengguna:    pengguna,
-		kedaluwarsa: time.Now().Add(durasisesi),
+		csrfToken:   csrfToken,
+		kedaluwarsa: sekarang.Add(durasisesi),
 	}
-	muSesi.Unlock()
 	return id, nil
 }
 
-// AmbilSesi mengembalikan pengguna dari ID sesi; nil bila tidak ada atau kedaluwarsa.
-func AmbilSesi(id string) *domain.Pengguna {
+// ambilEntriSesi mengembalikan pengguna dan token CSRF terikat sesi; nil bila tidak valid/kedaluwarsa.
+func ambilEntriSesi(id string) (*domain.Pengguna, string) {
+	if id == "" {
+		return nil, ""
+	}
 	muSesi.RLock()
 	entri, ada := storeSesi[id]
 	muSesi.RUnlock()
@@ -55,10 +88,16 @@ func AmbilSesi(id string) *domain.Pengguna {
 		if ada {
 			HapusSesi(id)
 		}
-		return nil
+		return nil, ""
 	}
 	p := entri.pengguna
-	return &p
+	return &p, entri.csrfToken
+}
+
+// AmbilSesi mengembalikan pengguna dari ID sesi; nil bila tidak ada atau kedaluwarsa.
+func AmbilSesi(id string) *domain.Pengguna {
+	p, _ := ambilEntriSesi(id)
+	return p
 }
 
 // HapusSesi menghapus sesi dari store.
@@ -81,9 +120,8 @@ func bersihkanSesiKedaluwarsa() {
 	muSesi.Unlock()
 }
 
-// MulaiCleanupSesi memulai goroutine yang membersihkan sesi kedaluwarsa secara periodik.
+// MulaiCleanupSesi memulai goroutine yang membersihkan sesi dan rate limit kedaluwarsa secara periodik.
 // Goroutine berhenti ketika ctx dibatalkan (saat server shutdown).
-// Panggil dari main() setelah server siap.
 func MulaiCleanupSesi(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(intervalBersihSesi)
@@ -92,9 +130,8 @@ func MulaiCleanupSesi(ctx context.Context) {
 			select {
 			case <-ticker.C:
 				bersihkanSesiKedaluwarsa()
-				hapusTokenCSRFKedaluwarsa()
 				bersihkanRateLimitKedaluwarsa()
-				log.Printf("cleanup: sesi, csrf, dan rate limit dibersihkan")
+				log.Printf("cleanup: sesi dan rate limit kedaluwarsa dibersihkan")
 			case <-ctx.Done():
 				log.Printf("cleanup sesi: goroutine berhenti")
 				return

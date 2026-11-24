@@ -16,6 +16,7 @@
 <div class="alert alert-info" role="status">Setelah ditutup, periode terkunci dan penutupan tidak dapat dibatalkan.</div>
 <section class="panel">
   <form method="post" action="/periode/{{.Isi.Periode.ID}}/tutup">
+    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
     <label style="display:flex;align-items:flex-start;gap:10px;font-weight:400">
       <input type="checkbox" name="sudah_dibayar" value="1" required style="width:auto;min-height:auto;margin-top:3px">
       <span>Saya sudah membayarkan gaji periode ini.</span>

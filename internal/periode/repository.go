@@ -7,6 +7,8 @@ import (
 	"errors"
 	"time"
 
+	mysql "github.com/go-sql-driver/mysql"
+
 	"penggajian-konveksi/internal/domain"
 )
 
@@ -15,8 +17,12 @@ var (
 	ErrPeriodeTidakDitemukan = errors.New("periode tidak ditemukan")
 	// ErrPeriodeSudahDitutup menegaskan bahwa penutupan periode tidak dapat dibatalkan.
 	ErrPeriodeSudahDitutup = errors.New("periode sudah ditutup dan penutupan tidak dapat dibatalkan")
+	// ErrPeriodeTumpangTindih dipakai saat periode dengan tipe sama saling beririsan.
+	ErrPeriodeTumpangTindih = errors.New("periode bertumpang tindih dengan periode yang sudah ada")
 	// ErrDatabasePeriodeTidakTersedia dipakai saat service dibuat tanpa koneksi database.
 	ErrDatabasePeriodeTidakTersedia = errors.New("database periode tidak tersedia")
+	// ErrKoreksiTidakSinkron dipakai saat total koreksi pada slip tidak cocok dengan koreksi terikat periode.
+	ErrKoreksiTidakSinkron = errors.New("koreksi pada slip tidak sinkron; silakan hitung ulang periode sebelum menutup")
 )
 
 // RingkasanTutup adalah data yang ditampilkan sebelum periode dikunci.
@@ -33,10 +39,22 @@ type Repository struct{ db *sql.DB }
 // NewRepository membuat repository periode.
 func NewRepository(db *sql.DB) *Repository { return &Repository{db: db} }
 
+func tipePeriodeUntukJenis(jenis domain.JenisPekerja) domain.TipePeriode {
+	if jenis == domain.PekerjaBulanan {
+		return domain.PeriodeBulanan
+	}
+	return domain.PeriodeMingguan
+}
+
 // SimpanPeriode menyimpan periode baru dengan status TERBUKA.
+// Error 1062 (race insert bersamaan) diterjemahkan menjadi ErrPeriodeTumpangTindih.
 func (r *Repository) SimpanPeriode(ctx context.Context, p *domain.PeriodeGaji) error {
 	res, e := r.db.ExecContext(ctx, `INSERT INTO periode_gaji(tipe,tanggal_mulai,tanggal_selesai,status) VALUES(?,?,?,'TERBUKA')`, p.Tipe, p.TanggalMulai.Format("2006-01-02"), p.TanggalSelesai.Format("2006-01-02"))
 	if e != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(e, &mysqlErr) && mysqlErr.Number == 1062 {
+			return ErrPeriodeTumpangTindih
+		}
 		return e
 	}
 	p.ID, e = res.LastInsertId()
@@ -96,6 +114,20 @@ func (r *Repository) PeriodeTerkunci(ctx context.Context, t time.Time) (bool, er
 	return n > 0, e
 }
 
+// PeriodeTerkunciJenis bernilai benar bila tanggal berada di periode berstatus DITUTUP
+// yang sesuai jenis pekerja (HARIAN -> MINGGUAN, BULANAN -> BULANAN).
+// Dengan ini, penutupan periode MINGGUAN tidak ikut mengunci pekerja BULANAN yang periodenya masih TERBUKA.
+func (r *Repository) PeriodeTerkunciJenis(ctx context.Context, jenis domain.JenisPekerja, t time.Time) (bool, error) {
+	var n int
+	e := r.db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*) FROM periode_gaji WHERE status='DITUTUP' AND tipe=? AND ? BETWEEN tanggal_mulai AND tanggal_selesai`,
+		tipePeriodeUntukJenis(jenis),
+		t.Format("2006-01-02"),
+	).Scan(&n)
+	return n > 0, e
+}
+
 // PeriodeSebelumnya mengambil periode bertipe sama yang selesai sebelum p dimulai.
 // Nilai kedua bernilai false untuk periode pertama sehingga prasyaratnya lolos.
 func (r *Repository) PeriodeSebelumnya(ctx context.Context, p domain.PeriodeGaji) (domain.PeriodeGaji, bool, error) {
@@ -140,8 +172,10 @@ func (r *Repository) UbahStatus(ctx context.Context, id int64, s domain.StatusPe
 	return tx.Commit()
 }
 
-// Tutup mengunci periode, mengurangi sisa kasbon, dan menandai koreksi dalam satu transaksi.
-// Penutupan yang sudah terjadi tidak dapat dibalik karena status DITUTUP ditolak di sini.
+// Tutup mengunci periode, memverifikasi konsistensi koreksi, dan mengurangi sisa kasbon dalam satu transaksi.
+// Koreksi baru yang dicatat setelah periode dihitung (periode_terapan_id IS NULL) TIDAK ditandai selesai
+// di sini agar tidak hilang permanen — koreksi tersebut tetap Menunggu untuk periode berikutnya (atau masuk
+// bila Admin menjalankan Hitung Ulang sebelum menutup).
 func (r *Repository) Tutup(ctx context.Context, id int64) error {
 	tx, e := r.db.BeginTx(ctx, nil)
 	if e != nil {
@@ -166,7 +200,6 @@ func (r *Repository) Tutup(ctx context.Context, id int64) error {
 	}
 
 	// Jaga urutan: periode sebelumnya dengan tipe yang sama wajib sudah ditutup.
-	// Periode pertama lolos karena tidak ada baris sebelumnya.
 	var statusSebelumnya domain.StatusPeriode
 	e = tx.QueryRowContext(ctx, `SELECT status FROM periode_gaji WHERE tipe=? AND tanggal_selesai<? ORDER BY tanggal_selesai DESC LIMIT 1 FOR UPDATE`, tipe, mulai.Format("2006-01-02")).Scan(&statusSebelumnya)
 	if e != nil && !errors.Is(e, sql.ErrNoRows) {
@@ -176,14 +209,20 @@ func (r *Repository) Tutup(ctx context.Context, id int64) error {
 		return errors.New("periode sebelumnya harus ditutup terlebih dahulu")
 	}
 
-	// Pengurangan kasbon dilakukan dari rincian potongan aktual setiap slip, tepat sekali.
-	_, e = tx.ExecContext(ctx, `UPDATE kasbon k JOIN (SELECT pk.kasbon_id,SUM(pk.jumlah) jumlah FROM potongan_kasbon pk JOIN slip_gaji s ON s.id=pk.slip_id WHERE s.periode_id=? GROUP BY pk.kasbon_id) x ON x.kasbon_id=k.id SET k.sisa=GREATEST(0,k.sisa-x.jumlah)`, id)
-	if e != nil {
+	// Pastikan koreksi yang masuk slip sinkron dengan koreksi yang terikat pada periode ini.
+	var sumSlipKoreksi, sumTerikat int64
+	if e = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(total_koreksi),0) FROM slip_gaji WHERE periode_id=?`, id).Scan(&sumSlipKoreksi); e != nil {
 		return e
 	}
-	// Koreksi yang menunggu untuk pekerja pada periode ini ditandai selesai.
-	// Koreksi yang berasal dari periode ini sendiri tidak boleh ikut ditandai.
-	_, e = tx.ExecContext(ctx, `UPDATE koreksi_gaji k JOIN slip_gaji s ON s.pekerja_id=k.pekerja_id SET k.periode_terapan_id=? WHERE s.periode_id=? AND k.periode_terapan_id IS NULL AND k.periode_asal_id<>?`, id, id, id)
+	if e = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(jumlah),0) FROM koreksi_gaji WHERE periode_terapan_id=?`, id).Scan(&sumTerikat); e != nil {
+		return e
+	}
+	if sumSlipKoreksi != sumTerikat {
+		return ErrKoreksiTidakSinkron
+	}
+
+	// Pengurangan kasbon dilakukan dari rincian potongan aktual setiap slip, tepat sekali.
+	_, e = tx.ExecContext(ctx, `UPDATE kasbon k JOIN (SELECT pk.kasbon_id,SUM(pk.jumlah) jumlah FROM potongan_kasbon pk JOIN slip_gaji s ON s.id=pk.slip_id WHERE s.periode_id=? GROUP BY pk.kasbon_id) x ON x.kasbon_id=k.id SET k.sisa=GREATEST(0,k.sisa-x.jumlah)`, id)
 	if e != nil {
 		return e
 	}
@@ -205,9 +244,8 @@ func (r *Repository) Ringkasan(ctx context.Context, id int64) (RingkasanTutup, e
 	if e != nil {
 		return x, e
 	}
-	// Sebelum ditutup, koreksi masih menunggu. Tampilkan koreksi yang akan diterapkan
-	// pada periode ini, lalu tetap hitung yang sudah diterapkan setelah penutupan.
-	e = r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM koreksi_gaji k WHERE k.periode_terapan_id=? OR (k.periode_terapan_id IS NULL AND k.periode_asal_id<>? AND EXISTS (SELECT 1 FROM slip_gaji s WHERE s.periode_id=? AND s.pekerja_id=k.pekerja_id))`, id, id, id).Scan(&x.JumlahKoreksi)
+	// Hitung koreksi yang benar-benar terikat masuk dalam slip periode ini.
+	e = r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM koreksi_gaji WHERE periode_terapan_id=?`, id).Scan(&x.JumlahKoreksi)
 	return x, e
 }
 

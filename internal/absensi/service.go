@@ -30,7 +30,7 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// CatatAbsensi mencatat absensi untuk jadwal yang ada.
+// CatatAbsensi mencatat absensi untuk jadwal yang ada secara atomik (mengunci jadwal_shift).
 func (s *Service) CatatAbsensi(ctx context.Context, data domain.Absensi) (int64, error) {
 	if s.repo == nil || data.JadwalShiftID <= 0 {
 		return 0, ErrDataTidakValid
@@ -39,43 +39,18 @@ func (s *Service) CatatAbsensi(ctx context.Context, data domain.Absensi) (int64,
 		return 0, ErrJamMasukTidakValid
 	}
 
-	jadwal, err := s.repo.AmbilJadwalByID(ctx, data.JadwalShiftID)
-	if err != nil {
-		if errors.Is(err, ErrJadwalTidakDitemukan) {
-			return 0, err
-		}
-		return 0, err
-	}
-	if !tanggalSama(data.JamMasuk, jadwal.Tanggal) {
-		return 0, ErrTanggalTidakSesuai
-	}
-	terkunci, err := s.repo.PeriodeTerkunci(ctx, jadwal.Tanggal)
-	if err != nil {
-		return 0, err
-	}
-	if terkunci {
-		return 0, ErrPeriodeTerkunci
-	}
-
-	ada, err := s.repo.AdaAbsensiUntukJadwal(ctx, data.JadwalShiftID)
-	if err != nil {
-		return 0, err
-	}
-	if ada {
-		return 0, ErrAbsensiGanda
-	}
-
+	var err error
 	data.JamKeluar, err = normalisasiJamKeluar(data.JamMasuk, data.JamKeluar)
 	if err != nil {
 		return 0, err
 	}
-	if err := s.repo.SimpanAbsensi(ctx, &data); err != nil {
+	if err := s.repo.SimpanAbsensiAtomik(ctx, &data); err != nil {
 		return 0, err
 	}
 	return data.ID, nil
 }
 
-// UbahAbsensi memperbarui jam masuk dan jam keluar.
+// UbahAbsensi memperbarui jam masuk dan jam keluar secara atomik.
 func (s *Service) UbahAbsensi(ctx context.Context, data domain.Absensi) error {
 	if s.repo == nil || data.ID <= 0 {
 		return ErrDataTidakValid
@@ -84,33 +59,12 @@ func (s *Service) UbahAbsensi(ctx context.Context, data domain.Absensi) error {
 		return ErrJamMasukTidakValid
 	}
 
-	_, jadwal, err := s.repo.AmbilAbsensiByID(ctx, data.ID)
-	if err != nil {
-		if errors.Is(err, ErrAbsensiTidakDitemukan) {
-			return err
-		}
-		return err
-	}
-	if data.JadwalShiftID != 0 && data.JadwalShiftID != jadwal.ID {
-		return ErrDataTidakValid
-	}
-	if !tanggalSama(data.JamMasuk, jadwal.Tanggal) {
-		return ErrTanggalTidakSesuai
-	}
-	terkunci, err := s.repo.PeriodeTerkunci(ctx, jadwal.Tanggal)
-	if err != nil {
-		return err
-	}
-	if terkunci {
-		return ErrPeriodeTerkunci
-	}
-
-	data.JadwalShiftID = jadwal.ID
+	var err error
 	data.JamKeluar, err = normalisasiJamKeluar(data.JamMasuk, data.JamKeluar)
 	if err != nil {
 		return err
 	}
-	return s.repo.UbahAbsensi(ctx, data)
+	return s.repo.UbahAbsensiAtomik(ctx, data)
 }
 
 // DaftarAbsensi mengambil absensi yang sudah tercatat pada tanggal tertentu.

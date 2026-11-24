@@ -45,6 +45,11 @@ type PenguncianPeriode interface {
 	PeriksaPeriodeTerkunci(ctx context.Context, tanggal time.Time) (bool, error)
 }
 
+// PenguncianPeriodeJenis memeriksa kunci periode sesuai jenis pekerja.
+type PenguncianPeriodeJenis interface {
+	PeriksaPeriodeTerkunciJenis(ctx context.Context, jenis domain.JenisPekerja, tanggal time.Time) (bool, error)
+}
+
 // Service mengatur kasbon dan sisa potongannya.
 type Service struct {
 	repo    *Repository
@@ -57,15 +62,13 @@ func NewService(repo *Repository) *Service {
 }
 
 // AturPeriode memasang PeriodeProvider dari Modul 5 (opsional).
-// Tanpa ini, atau selama fungsi Modul 5 belum diimplementasi, service
-// memeriksa tabel periode_gaji langsung.
 func (s *Service) AturPeriode(p PenguncianPeriode) {
 	s.periode = p
 }
 
-func (s *Service) terkunci(ctx context.Context, tanggal time.Time) (bool, error) {
-	if s.periode != nil {
-		kunci, err := s.periode.PeriksaPeriodeTerkunci(ctx, tanggal)
+func (s *Service) terkunciJenis(ctx context.Context, jenis domain.JenisPekerja, tanggal time.Time) (bool, error) {
+	if pj, ok := s.periode.(PenguncianPeriodeJenis); ok {
+		kunci, err := pj.PeriksaPeriodeTerkunciJenis(ctx, jenis, tanggal)
 		if err == nil {
 			return kunci, nil
 		}
@@ -73,7 +76,7 @@ func (s *Service) terkunci(ctx context.Context, tanggal time.Time) (bool, error)
 			return false, err
 		}
 	}
-	return s.repo.TanggalTerkunci(ctx, tanggal)
+	return s.repo.TanggalTerkunciJenis(ctx, jenis, tanggal)
 }
 
 // validasiKasbon memeriksa aturan yang tidak butuh database.
@@ -105,7 +108,7 @@ func (s *Service) CatatKasbon(ctx context.Context, kasbon domain.Kasbon) (int64,
 		return 0, err
 	}
 
-	aktif, err := s.repo.PekerjaAktif(ctx, kasbon.PekerjaID)
+	aktif, jenis, err := s.repo.PekerjaAktifDanJenis(ctx, kasbon.PekerjaID)
 	if err != nil {
 		return 0, err
 	}
@@ -113,7 +116,7 @@ func (s *Service) CatatKasbon(ctx context.Context, kasbon domain.Kasbon) (int64,
 		return 0, ErrPekerjaTidakAktif
 	}
 
-	kunci, err := s.terkunci(ctx, kasbon.Tanggal)
+	kunci, err := s.terkunciJenis(ctx, jenis, kasbon.Tanggal)
 	if err != nil {
 		return 0, err
 	}

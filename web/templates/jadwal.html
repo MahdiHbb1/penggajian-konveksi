@@ -8,6 +8,7 @@
     </div>
     <div class="aksi" style="margin-top:0;">
       <form method="post" action="/jadwal/salin">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <input type="hidden" name="mulai" value="{{.Isi.Mulai}}">
         <button class="btn btn-sekunder" type="submit">Salin dari minggu lalu</button>
       </form>
@@ -17,6 +18,7 @@
 </section>
 
 <form method="post" action="/jadwal">
+  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
   <input type="hidden" name="mulai" value="{{.Isi.Mulai}}">
   <section class="panel">
     <div class="tabel-wrap">

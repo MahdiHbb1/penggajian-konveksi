@@ -10,6 +10,8 @@ import (
 	"penggajian-konveksi/internal/domain"
 )
 
+var errDatabaseTidakSiap = errors.New("database laporan belum tersedia")
+
 // Repository mengakses slip dan rekap.
 type Repository struct {
 	db *sql.DB
@@ -21,13 +23,10 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 // AmbilSlip mengambil slip satu pekerja pada periode beserta data pekerja dan periode.
-//
-// Masukan: context, ID periode, ID pekerja.
-// Hasil: SlipGaji beserta pekerja dan periode.
-// Aturan: 13, 17.
-// Tabel: slip_gaji, pekerja, periode_gaji.
-// Memanggil: database/sql QueryRowContext.
 func (r *Repository) AmbilSlip(ctx context.Context, periodeID, pekerjaID int64) (domain.SlipGaji, error) {
+	if r == nil || r.db == nil {
+		return domain.SlipGaji{}, errDatabaseTidakSiap
+	}
 	var s domain.SlipGaji
 	var pekerja domain.Pekerja
 	var periode domain.PeriodeGaji
@@ -80,13 +79,10 @@ func (r *Repository) AmbilSlip(ctx context.Context, periodeID, pekerjaID int64) 
 }
 
 // DaftarSlip mengambil seluruh slip pada periode beserta data pekerja.
-//
-// Masukan: context dan ID periode.
-// Hasil: daftar slip.
-// Aturan: 17.
-// Tabel: slip_gaji, pekerja.
-// Memanggil: database/sql QueryContext.
 func (r *Repository) DaftarSlip(ctx context.Context, periodeID int64) ([]domain.SlipGaji, error) {
+	if r == nil || r.db == nil {
+		return nil, errDatabaseTidakSiap
+	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT
 			sg.id, sg.periode_id, sg.pekerja_id,
@@ -137,13 +133,10 @@ func (r *Repository) DaftarSlip(ctx context.Context, periodeID int64) ([]domain.
 }
 
 // Rekap mengambil total rekap satu periode dari baris slip yang sudah tersimpan.
-//
-// Masukan: context dan ID periode.
-// Hasil: RekapGaji.
-// Aturan: 12, 13.
-// Tabel: slip_gaji.
-// Memanggil: database/sql QueryRowContext.
 func (r *Repository) Rekap(ctx context.Context, periodeID int64) (domain.RekapGaji, error) {
+	if r == nil || r.db == nil {
+		return domain.RekapGaji{}, errDatabaseTidakSiap
+	}
 	var rekap domain.RekapGaji
 	rekap.PeriodeID = periodeID
 
@@ -171,12 +164,10 @@ func (r *Repository) Rekap(ctx context.Context, periodeID int64) (domain.RekapGa
 }
 
 // AmbilStatusPeriode mengambil status satu periode berdasarkan ID-nya.
-// Digunakan oleh service untuk memvalidasi status sebelum menampilkan slip atau rekap.
-//
-// Masukan: context dan ID periode.
-// Hasil: StatusPeriode.
-// Tabel: periode_gaji.
 func (r *Repository) AmbilStatusPeriode(ctx context.Context, periodeID int64) (domain.StatusPeriode, error) {
+	if r == nil || r.db == nil {
+		return "", errDatabaseTidakSiap
+	}
 	var status domain.StatusPeriode
 	err := r.db.QueryRowContext(ctx,
 		`SELECT status FROM periode_gaji WHERE id = ? LIMIT 1`,
@@ -192,15 +183,14 @@ func (r *Repository) AmbilStatusPeriode(ctx context.Context, periodeID int64) (d
 }
 
 // DaftarPeriodeTerbaru mengambil daftar periode terbaru.
-//
-// Masukan: context dan limit jumlah periode.
-// Hasil: daftar PeriodeGaji urut dari terbaru.
-// Tabel: periode_gaji.
 func (r *Repository) DaftarPeriodeTerbaru(ctx context.Context, limit int) ([]domain.PeriodeGaji, error) {
+	if r == nil || r.db == nil {
+		return nil, errDatabaseTidakSiap
+	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, tipe, tanggal_mulai, tanggal_selesai, status, ditutup_pada
 		FROM periode_gaji
-		ORDER BY tanggal_mulai DESC
+		ORDER BY tanggal_mulai DESC, id DESC
 		LIMIT ?`,
 		limit,
 	)
@@ -209,6 +199,31 @@ func (r *Repository) DaftarPeriodeTerbaru(ctx context.Context, limit int) ([]dom
 	}
 	defer rows.Close()
 
+	return scanDaftarPeriode(rows)
+}
+
+// DaftarPeriodeSiapLaporan mengambil periode berstatus DIHITUNG atau DITUTUP langsung dari SQL.
+func (r *Repository) DaftarPeriodeSiapLaporan(ctx context.Context, limit int) ([]domain.PeriodeGaji, error) {
+	if r == nil || r.db == nil {
+		return nil, errDatabaseTidakSiap
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, tipe, tanggal_mulai, tanggal_selesai, status, ditutup_pada
+		FROM periode_gaji
+		WHERE status IN ('DIHITUNG', 'DITUTUP')
+		ORDER BY tanggal_mulai DESC, id DESC
+		LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("daftar periode siap laporan: %w", err)
+	}
+	defer rows.Close()
+
+	return scanDaftarPeriode(rows)
+}
+
+func scanDaftarPeriode(rows *sql.Rows) ([]domain.PeriodeGaji, error) {
 	var hasil []domain.PeriodeGaji
 	for rows.Next() {
 		var p domain.PeriodeGaji
@@ -227,20 +242,21 @@ func (r *Repository) DaftarPeriodeTerbaru(ctx context.Context, limit int) ([]dom
 	return hasil, nil
 }
 
-// HitungAbsensiBelumLengkap menghitung jumlah absensi yang belum memiliki jam_keluar
-// dalam rentang tanggal periode tertentu.
-//
-// Masukan: context dan ID periode.
-// Hasil: jumlah absensi belum lengkap.
-// Tabel: absensi, jadwal_shift, periode_gaji.
+// HitungAbsensiBelumLengkap menghitung jumlah absensi tanpa jam_keluar pada periode tertentu
+// yang sesuai dengan jenis pekerja tipe periode tersebut (MINGGUAN->HARIAN, BULANAN->BULANAN).
 func (r *Repository) HitungAbsensiBelumLengkap(ctx context.Context, periodeID int64) (int, error) {
+	if r == nil || r.db == nil {
+		return 0, errDatabaseTidakSiap
+	}
 	var jumlah int
 	err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM absensi a
 		JOIN jadwal_shift js ON js.id = a.jadwal_shift_id
+		JOIN pekerja p ON p.id = js.pekerja_id
 		JOIN periode_gaji pg ON pg.id = ?
 		WHERE js.tanggal BETWEEN pg.tanggal_mulai AND pg.tanggal_selesai
+		  AND p.jenis = CASE WHEN pg.tipe = 'MINGGUAN' THEN 'HARIAN' ELSE 'BULANAN' END
 		  AND a.jam_keluar IS NULL`,
 		periodeID,
 	).Scan(&jumlah)
@@ -251,11 +267,10 @@ func (r *Repository) HitungAbsensiBelumLengkap(ctx context.Context, periodeID in
 }
 
 // TotalGajiBersihPeriode menghitung total gaji bersih pada satu periode.
-//
-// Masukan: context dan ID periode.
-// Hasil: total Rupiah gaji bersih.
-// Tabel: slip_gaji.
 func (r *Repository) TotalGajiBersihPeriode(ctx context.Context, periodeID int64) (domain.Rupiah, error) {
+	if r == nil || r.db == nil {
+		return 0, errDatabaseTidakSiap
+	}
 	var total domain.Rupiah
 	err := r.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(gaji_bersih), 0) FROM slip_gaji WHERE periode_id = ?`,
@@ -268,11 +283,10 @@ func (r *Repository) TotalGajiBersihPeriode(ctx context.Context, periodeID int64
 }
 
 // TotalSisaKasbon menghitung total sisa kasbon seluruh pekerja.
-//
-// Masukan: context.
-// Hasil: total Rupiah sisa kasbon.
-// Tabel: kasbon.
 func (r *Repository) TotalSisaKasbon(ctx context.Context) (domain.Rupiah, error) {
+	if r == nil || r.db == nil {
+		return 0, errDatabaseTidakSiap
+	}
 	var total domain.Rupiah
 	err := r.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(sisa), 0) FROM kasbon WHERE sisa > 0`,
@@ -283,8 +297,27 @@ func (r *Repository) TotalSisaKasbon(ctx context.Context) (domain.Rupiah, error)
 	return total, nil
 }
 
+// SisaKasbonPekerja menghitung total sisa kasbon berjalan milik satu pekerja untuk ditampilkan di slip.
+func (r *Repository) SisaKasbonPekerja(ctx context.Context, pekerjaID int64) (domain.Rupiah, error) {
+	if r == nil || r.db == nil {
+		return 0, errDatabaseTidakSiap
+	}
+	var total domain.Rupiah
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(sisa), 0) FROM kasbon WHERE pekerja_id = ? AND sisa > 0`,
+		pekerjaID,
+	).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("sisa kasbon pekerja: %w", err)
+	}
+	return total, nil
+}
+
 // DaftarRincianSlip mengambil rincian upah harian berdasarkan ID slip.
 func (r *Repository) DaftarRincianSlip(ctx context.Context, slipID int64) ([]domain.SlipGajiDetail, error) {
+	if r == nil || r.db == nil {
+		return nil, errDatabaseTidakSiap
+	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT
 			id, slip_id, absensi_id, tanggal,
@@ -302,31 +335,20 @@ func (r *Repository) DaftarRincianSlip(ctx context.Context, slipID int64) ([]dom
 	defer rows.Close()
 
 	var hasil []domain.SlipGajiDetail
-
 	for rows.Next() {
 		var d domain.SlipGajiDetail
-
 		if err := rows.Scan(
-			&d.ID,
-			&d.SlipID,
-			&d.AbsensiID,
-			&d.Tanggal,
-			&d.UpahPokokHari,
-			&d.UpahPerJam,
-			&d.MenitTelat,
-			&d.PotonganTelat,
-			&d.MenitLembur,
-			&d.UpahLembur,
+			&d.ID, &d.SlipID, &d.AbsensiID, &d.Tanggal,
+			&d.UpahPokokHari, &d.UpahPerJam,
+			&d.MenitTelat, &d.PotonganTelat,
+			&d.MenitLembur, &d.UpahLembur,
 		); err != nil {
 			return nil, fmt.Errorf("scan rincian slip: %w", err)
 		}
-
 		hasil = append(hasil, d)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterasi rincian slip: %w", err)
 	}
-
 	return hasil, nil
 }

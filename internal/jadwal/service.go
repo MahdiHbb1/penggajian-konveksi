@@ -44,6 +44,11 @@ type PenguncianPeriode interface {
 	PeriksaPeriodeTerkunci(ctx context.Context, tanggal time.Time) (bool, error)
 }
 
+// PenguncianPeriodeJenis memeriksa kunci periode sesuai jenis pekerja (HARIAN->MINGGUAN, BULANAN->BULANAN).
+type PenguncianPeriodeJenis interface {
+	PeriksaPeriodeTerkunciJenis(ctx context.Context, jenis domain.JenisPekerja, tanggal time.Time) (bool, error)
+}
+
 // Service mengatur jadwal shift mingguan.
 type Service struct {
 	repo    *Repository
@@ -55,9 +60,7 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// AturPeriode memasang PeriodeProvider dari Modul 5 (opsional).
-// Tanpa ini, atau selama fungsi Modul 5 belum diimplementasi, service
-// memeriksa tabel periode_gaji langsung.
+// AturPeriode memasang PeriodeProvider dari Modul 5.
 func (s *Service) AturPeriode(p PenguncianPeriode) {
 	s.periode = p
 }
@@ -76,6 +79,20 @@ func (s *Service) Terkunci(ctx context.Context, tanggal time.Time) (bool, error)
 	return s.repo.TanggalTerkunci(ctx, tanggal)
 }
 
+// TerkunciJenis memeriksa apakah tanggal berada di periode DITUTUP yang sesuai jenis pekerja.
+func (s *Service) TerkunciJenis(ctx context.Context, jenis domain.JenisPekerja, tanggal time.Time) (bool, error) {
+	if pj, ok := s.periode.(PenguncianPeriodeJenis); ok {
+		kunci, err := pj.PeriksaPeriodeTerkunciJenis(ctx, jenis, tanggal)
+		if err == nil {
+			return kunci, nil
+		}
+		if !errors.Is(err, domain.ErrBelumDiimplementasi) {
+			return false, err
+		}
+	}
+	return s.repo.TanggalTerkunciJenis(ctx, jenis, tanggal)
+}
+
 // SeninPekan mengembalikan Senin (pukul 00.00) pada pekan yang memuat t.
 // Hari Minggu dianggap penutup pekan sebelumnya.
 func SeninPekan(t time.Time) time.Time {
@@ -83,9 +100,7 @@ func SeninPekan(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day()-selisih, 0, 0, 0, 0, t.Location())
 }
 
-// WaktuShift mengubah jam shift ("07:00" atau "07:00:00") menjadi datetime
-// pada tanggal tertentu. Dipakai Modul 3 dan 4 untuk menghitung terlambat
-// dan lembur. Shift tidak melewati tengah malam (jam selesai > jam mulai).
+// WaktuShift mengubah jam shift ("07:00" atau "07:00:00") menjadi datetime pada tanggal tertentu.
 func WaktuShift(tanggal time.Time, jam string) (time.Time, error) {
 	t, err := time.Parse("15:04", jam)
 	if err != nil {
@@ -98,12 +113,6 @@ func WaktuShift(tanggal time.Time, jam string) (time.Time, error) {
 }
 
 // DaftarShift mengambil daftar shift.
-//
-// Masukan: context.
-// Hasil: daftar shift.
-// Aturan: 3.
-// Tabel: shift.
-// Memanggil: Repository.DaftarShift.
 func (s *Service) DaftarShift(ctx context.Context) ([]domain.Shift, error) {
 	return s.repo.DaftarShift(ctx)
 }
@@ -119,12 +128,6 @@ func (s *Service) JadwalPekan(ctx context.Context, mulai time.Time) ([]SelJadwal
 }
 
 // BuatJadwal menambahkan jadwal pekerja.
-//
-// Masukan: context dan data jadwal.
-// Hasil: ID jadwal baru.
-// Aturan: 3, 14, 19.
-// Tabel: jadwal_shift, pekerja, periode_gaji.
-// Memanggil: Repository.SimpanJadwal, PeriodeProvider.PeriksaPeriodeTerkunci.
 func (s *Service) BuatJadwal(ctx context.Context, jadwal domain.JadwalShift) (int64, error) {
 	if jadwal.PekerjaID <= 0 {
 		return 0, ErrPekerjaTidakAktif
@@ -139,7 +142,7 @@ func (s *Service) BuatJadwal(ctx context.Context, jadwal domain.JadwalShift) (in
 		return 0, ErrHariMinggu
 	}
 
-	aktif, err := s.repo.PekerjaAktif(ctx, jadwal.PekerjaID)
+	aktif, jenis, err := s.repo.PekerjaAktifDanJenis(ctx, jadwal.PekerjaID)
 	if err != nil {
 		return 0, err
 	}
@@ -155,20 +158,12 @@ func (s *Service) BuatJadwal(ctx context.Context, jadwal domain.JadwalShift) (in
 		return 0, ErrShiftTidakValid
 	}
 
-	kunci, err := s.Terkunci(ctx, jadwal.Tanggal)
+	kunci, err := s.TerkunciJenis(ctx, jenis, jadwal.Tanggal)
 	if err != nil {
 		return 0, err
 	}
 	if kunci {
 		return 0, ErrPeriodeTertutup
-	}
-
-	_, sudah, err := s.repo.CariJadwalID(ctx, jadwal.PekerjaID, jadwal.Tanggal)
-	if err != nil {
-		return 0, err
-	}
-	if sudah {
-		return 0, ErrJadwalGanda
 	}
 
 	if err := s.repo.SimpanJadwal(ctx, &jadwal); err != nil {
@@ -177,77 +172,37 @@ func (s *Service) BuatJadwal(ctx context.Context, jadwal domain.JadwalShift) (in
 	return jadwal.ID, nil
 }
 
-// periksaBisaDiubah memastikan jadwal tidak terkunci oleh absensi atau periode.
-func (s *Service) periksaBisaDiubah(ctx context.Context, id int64) (SelJadwal, error) {
-	sel, err := s.repo.JadwalByID(ctx, id)
-	if err != nil {
-		return SelJadwal{}, err
+// BuatJadwalTervalidasi menyimpan jadwal ketika status pekerja aktif, shift, dan kunci periode
+// sudah divalidasi secara batch di pemanggil (menghindari N+1 saat simpan grid pekan).
+func (s *Service) BuatJadwalTervalidasi(ctx context.Context, jadwal domain.JadwalShift) (int64, error) {
+	if jadwal.Tanggal.Weekday() == time.Sunday {
+		return 0, ErrHariMinggu
 	}
-	if sel.PunyaAbsensi {
-		return SelJadwal{}, ErrSudahAdaAbsensi
+	if err := s.repo.SimpanJadwal(ctx, &jadwal); err != nil {
+		return 0, err
 	}
-	kunci, err := s.Terkunci(ctx, sel.Tanggal)
-	if err != nil {
-		return SelJadwal{}, err
-	}
-	if kunci {
-		return SelJadwal{}, ErrPeriodeTertutup
-	}
-	return sel, nil
+	return jadwal.ID, nil
 }
 
-// UbahJadwal mengganti shift pada jadwal. Hanya ShiftID yang berubah.
-//
-// Masukan: context dan data jadwal (ID dan ShiftID terisi).
-// Hasil: error.
-// Aturan: 14, 19.
-// Tabel: jadwal_shift, absensi.
-// Memanggil: Repository.UbahJadwal.
+// UbahJadwal mengganti shift pada jadwal secara atomik (terlindungi lock transaksi).
 func (s *Service) UbahJadwal(ctx context.Context, jadwal domain.JadwalShift) error {
 	if jadwal.ShiftID <= 0 {
 		return ErrShiftTidakValid
 	}
-	if _, err := s.periksaBisaDiubah(ctx, jadwal.ID); err != nil {
-		return err
-	}
-	ada, err := s.repo.ShiftAda(ctx, jadwal.ShiftID)
-	if err != nil {
-		return err
-	}
-	if !ada {
-		return ErrShiftTidakValid
-	}
-	return s.repo.UbahJadwal(ctx, jadwal)
+	return s.repo.UbahJadwalAtomik(ctx, jadwal.ID, jadwal.ShiftID)
 }
 
-// BatalkanJadwal membatalkan jadwal yang belum punya absensi.
-//
-// Masukan: context dan ID jadwal.
-// Hasil: error.
-// Aturan: 14, 19.
-// Tabel: jadwal_shift, absensi.
-// Memanggil: Repository.BatalkanJadwal.
+// BatalkanJadwal membatalkan jadwal yang belum punya absensi secara atomik.
 func (s *Service) BatalkanJadwal(ctx context.Context, id int64) error {
-	if _, err := s.periksaBisaDiubah(ctx, id); err != nil {
-		return err
-	}
-	return s.repo.BatalkanJadwal(ctx, id)
+	return s.repo.BatalkanJadwalAtomik(ctx, id)
 }
 
 func kunciSel(pekerjaID int64, tanggal time.Time) string {
 	return fmt.Sprintf("%d_%s", pekerjaID, tanggal.Format(formatTanggalSQL))
 }
 
-// SalinJadwalMingguLalu menyalin jadwal pekan sebelumnya ke pekan tujuan.
-//
-// Masukan: context dan tanggal pekan tujuan (dinormalkan ke Senin).
-// Hasil: jumlah disalin, jumlah dilewati, error.
-// Aturan: 3, 19.
-// Tabel: jadwal_shift, pekerja, periode_gaji.
-// Memanggil: Repository.JadwalRentang, Repository.SimpanJadwal.
-//
-// Sel dilewati bila sudah terisi, tanggalnya di periode yang ditutup,
-// atau pekerjanya sudah tidak aktif. Sel yang terisi tidak ditimpa.
+// SalinJadwalMingguLalu menyalin jadwal pekan sebelumnya ke pekan tujuan secara transaksional.
+// Sel dilewati bila sudah terisi, tanggalnya terkunci sesuai jenis pekerja, atau pekerja nonaktif.
 func (s *Service) SalinJadwalMingguLalu(ctx context.Context, mingguMulai time.Time) (int, int, error) {
 	tujuan := SeninPekan(mingguMulai)
 	sumber := tujuan.AddDate(0, 0, -7)
@@ -269,47 +224,56 @@ func (s *Service) SalinJadwalMingguLalu(ctx context.Context, mingguMulai time.Ti
 	if err != nil {
 		return 0, 0, err
 	}
-	aktif := make(map[int64]bool, len(aktifList))
+	jenisAktif := make(map[int64]domain.JenisPekerja, len(aktifList))
 	for _, p := range aktifList {
-		aktif[p.ID] = true
+		jenisAktif[p.ID] = p.Jenis
 	}
 
-	var terkunci [6]bool
-	for i := range terkunci {
-		terkunci[i], err = s.Terkunci(ctx, tujuan.AddDate(0, 0, i))
+	var kunciHarian, kunciBulanan [6]bool
+	for i := 0; i < 6; i++ {
+		tgl := tujuan.AddDate(0, 0, i)
+		kunciHarian[i], err = s.TerkunciJenis(ctx, domain.PekerjaHarian, tgl)
+		if err != nil {
+			return 0, 0, err
+		}
+		kunciBulanan[i], err = s.TerkunciJenis(ctx, domain.PekerjaBulanan, tgl)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	disalin, dilewati := 0, 0
+	dilewatiAwal := 0
+	var akanDisalin []domain.JadwalShift
 	for _, c := range asal {
 		idx := (int(c.Tanggal.Weekday()) + 6) % 7
-		if idx > 5 { // Minggu tidak pernah dijadwalkan
+		if idx > 5 {
 			continue
 		}
 		tanggal := tujuan.AddDate(0, 0, idx)
-		if !aktif[c.PekerjaID] || terisi[kunciSel(c.PekerjaID, tanggal)] || terkunci[idx] {
-			dilewati++
+		jenis, ada := jenisAktif[c.PekerjaID]
+		terkunci := kunciHarian[idx]
+		if jenis == domain.PekerjaBulanan {
+			terkunci = kunciBulanan[idx]
+		}
+		if !ada || terisi[kunciSel(c.PekerjaID, tanggal)] || terkunci {
+			dilewatiAwal++
 			continue
 		}
-		j := domain.JadwalShift{PekerjaID: c.PekerjaID, ShiftID: c.ShiftID, Tanggal: tanggal}
-		if err := s.repo.SimpanJadwal(ctx, &j); err != nil {
-			return disalin, dilewati, err
-		}
-		disalin++
+		akanDisalin = append(akanDisalin, domain.JadwalShift{
+			PekerjaID: c.PekerjaID,
+			ShiftID:   c.ShiftID,
+			Tanggal:   tanggal,
+		})
 	}
-	return disalin, dilewati, nil
+
+	disalin, dilewatiKonflik, err := s.repo.SalinJadwalBatch(ctx, akanDisalin)
+	if err != nil {
+		return 0, 0, err
+	}
+	return disalin, dilewatiAwal + dilewatiKonflik, nil
 }
 
 // AmbilJadwal mengambil jadwal pekerja pada tanggal.
-//
-// Masukan: context, ID pekerja, tanggal.
-// Hasil: JadwalShift beserta shift (jam "07:00"); ErrJadwalTidakAda bila
-// pekerja tidak dijadwalkan. Gunakan WaktuShift untuk mendapat datetime.
-// Aturan: 3.
-// Tabel: jadwal_shift, shift.
-// Memanggil: Repository.AmbilJadwal.
 func (s *Service) AmbilJadwal(ctx context.Context, pekerjaID int64, tanggal time.Time) (domain.JadwalShift, error) {
 	return s.repo.AmbilJadwal(ctx, pekerjaID, tanggal)
 }

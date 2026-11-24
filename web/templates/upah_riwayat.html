@@ -30,6 +30,7 @@
   <section class="panel">
     <h2>Tambah upah</h2>
     <form method="post" action="/pekerja/{{.Isi.Pekerja.ID}}/upah">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <label>Nominal baru (rupiah)
         <input type="number" name="nominal" min="1" step="1" required {{if .Isi.Nominal}}value="{{.Isi.Nominal}}"{{end}}>
       </label>

@@ -29,6 +29,7 @@
   <section class="panel">
     <h2>Koreksi baru</h2>
     <form method="post" action="/koreksi/baru">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <label>Pekerja
         <select name="pekerja_id" required>
           <option value="">Pilih pekerja</option>

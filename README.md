@@ -60,11 +60,12 @@ Jangan menyimpan password asli di source code, seed, atau README.
 
 ## Autentikasi dan Keamanan
 
-- Password di-hash dengan **bcrypt cost 12** (`golang.org/x/crypto/bcrypt`).
-- Session cookie: `HttpOnly`, `SameSite=Lax`, `Secure` (jika `SECURE_COOKIE=true`).
-- Middleware `MiddlewareAuth` melindungi seluruh halaman kecuali `/login` dan `/static/`.
-- Middleware `MiddlewarePeran` membatasi akses berdasarkan peran (Admin/Pemilik).
-- `/static/` dapat diakses tanpa login.
+- Password di-hash dengan **bcrypt cost 12** (`golang.org/x/crypto/bcrypt`) dengan perbandingan username exact (case-sensitive) dan dummy compare untuk mencegah enumerasi akun.
+- Session cookie: `HttpOnly`, `SameSite=Lax`, `Secure` (diatur lewat `SECURE_COOKIE=true` di `.env` atau environment). Sesi disimpan in-memory (pengguna login ulang bila server restart).
+- Proteksi **CSRF** penuh: Double-Submit Cookie (HttpOnly) pada `/login` dan Synchronizer Token terikat sesi pada seluruh permintaan mutasi (`POST`/`PUT`/`PATCH`/`DELETE`) di semua modul (fail-closed).
+- **Rate limiting** login atomik (anti-TOCTOU, case-insensitive, maks 5 percobaan gagal per 5 menit, kunci 15 menit) dan pembatas konkurensi bcrypt.
+- Middleware `MiddlewareAuth` melindungi seluruh halaman kecuali `/login` dan `/static/`, serta memasang header keamanan (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
+- Middleware `MiddlewarePeran` membatasi seluruh modul operasional (Modul 1–5) khusus `ADMIN`, sedangkan `/dashboard`, `/rekap`, dan `/slip` dapat diakses `ADMIN` dan `PEMILIK`.
 
 ## Struktur
 

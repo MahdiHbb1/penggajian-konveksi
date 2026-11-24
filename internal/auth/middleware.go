@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -17,12 +18,29 @@ func adalahRutePublik(path string) bool {
 	return path == "/login" || strings.HasPrefix(path, "/static/")
 }
 
-// MiddlewareAuth memasang pengguna pada context request.
+func adalahMetodeMutasi(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func pasangHeaderKeamanan(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Referrer-Policy", "same-origin")
+}
+
+// MiddlewareAuth memasang pengguna & CSRF token terikat sesi pada context request,
+// menetapkan header keamanan dasar, serta memvalidasi CSRF untuk semua permintaan mutasi.
 // Semua halaman kecuali /login dan /static/ memerlukan sesi sah.
-// Bila tidak ada sesi, redirect ke /login.
-// Halaman yang memerlukan login akan mendapatkan CSRF token untuk form POST.
 func MiddlewareAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pasangHeaderKeamanan(w)
+
 		if adalahRutePublik(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
@@ -35,7 +53,7 @@ func MiddlewareAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		pengguna := AmbilSesi(cookie.Value)
+		pengguna, csrfToken := ambilEntriSesi(cookie.Value)
 		if pengguna == nil {
 			// Hapus cookie kedaluwarsa.
 			http.SetCookie(w, buatCookieSesi("", -1))
@@ -43,10 +61,22 @@ func MiddlewareAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// Siapkan CSRF token untuk halaman yang sudah login.
-		token := ambilTokenCSRF(w, r)
+		// Validasi CSRF terpusat untuk semua request mutasi terautentikasi (fail-closed).
+		if adalahMetodeMutasi(r.Method) {
+			if err := r.ParseForm(); err != nil {
+				log.Printf("auth middleware: gagal membaca form %s %s dari %s: %v", r.Method, r.URL.Path, r.RemoteAddr, err)
+				http.Error(w, "Permintaan formulir tidak valid.", http.StatusForbidden)
+				return
+			}
+			if !cocokTokenCSRF(csrfToken, r.PostFormValue(namaFieldCSRF)) {
+				log.Printf("auth middleware: CSRF token tidak valid pada %s %s dari %s", r.Method, r.URL.Path, r.RemoteAddr)
+				http.Error(w, "Sesi formulir tidak valid. Silakan muat ulang halaman dan coba lagi.", http.StatusForbidden)
+				return
+			}
+		}
+
 		ctx := web.DenganPengguna(r.Context(), pengguna)
-		ctx = web.DenganCSRFToken(ctx, token)
+		ctx = web.DenganCSRFToken(ctx, csrfToken)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

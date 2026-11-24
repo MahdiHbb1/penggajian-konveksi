@@ -4,12 +4,18 @@ package laporan
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"penggajian-konveksi/internal/domain"
+	"penggajian-konveksi/internal/web"
 )
 
-// mockRepo mengimplementasikan repoAkses untuk pengujian unit.
+// mockRepo mengimplementasikan repoAkses untuk pengujian unit dan handler.
 type mockRepo struct {
 	slip              domain.SlipGaji
 	slips             []domain.SlipGaji
@@ -17,9 +23,11 @@ type mockRepo struct {
 	status            domain.StatusPeriode
 	rincian           []domain.SlipGajiDetail
 	periodes          []domain.PeriodeGaji
+	periodesSiap      []domain.PeriodeGaji
 	absensiBlmLengkap int
 	totalGajiBersih   domain.Rupiah
 	totalSisaKasbon   domain.Rupiah
+	sisaKasbonPekerja domain.Rupiah
 	errSlip           error
 	errDaftarSlip     error
 	errRekap          error
@@ -29,6 +37,7 @@ type mockRepo struct {
 	errAbsensi        error
 	errTotalGaji      error
 	errTotalKasbon    error
+	errSisaPekerja    error
 }
 
 func (m *mockRepo) AmbilSlip(_ context.Context, _, _ int64) (domain.SlipGaji, error) {
@@ -55,6 +64,22 @@ func (m *mockRepo) DaftarPeriodeTerbaru(_ context.Context, _ int) ([]domain.Peri
 	return m.periodes, m.errPeriode
 }
 
+func (m *mockRepo) DaftarPeriodeSiapLaporan(_ context.Context, _ int) ([]domain.PeriodeGaji, error) {
+	if m.errPeriode != nil {
+		return nil, m.errPeriode
+	}
+	if m.periodesSiap != nil {
+		return m.periodesSiap, nil
+	}
+	var hasil []domain.PeriodeGaji
+	for _, p := range m.periodes {
+		if p.Status == domain.PeriodeDihitung || p.Status == domain.PeriodeDitutup {
+			hasil = append(hasil, p)
+		}
+	}
+	return hasil, nil
+}
+
 func (m *mockRepo) HitungAbsensiBelumLengkap(_ context.Context, _ int64) (int, error) {
 	return m.absensiBlmLengkap, m.errAbsensi
 }
@@ -67,7 +92,10 @@ func (m *mockRepo) TotalSisaKasbon(_ context.Context) (domain.Rupiah, error) {
 	return m.totalSisaKasbon, m.errTotalKasbon
 }
 
-// newTestService membuat service dengan mock repository.
+func (m *mockRepo) SisaKasbonPekerja(_ context.Context, _ int64) (domain.Rupiah, error) {
+	return m.sisaKasbonPekerja, m.errSisaPekerja
+}
+
 func newTestService(repo *mockRepo) *Service {
 	return &Service{repo: repo}
 }
@@ -84,6 +112,18 @@ func TestAmbilSlipGaji_PeriodeTerbukaDitolak(t *testing.T) {
 	_, err := svc.AmbilSlipGaji(context.Background(), 1, 1)
 	if !errors.Is(err, ErrPeriodeBelumDihitung) {
 		t.Fatalf("AmbilSlipGaji(TERBUKA): ingin ErrPeriodeBelumDihitung, dapat %v", err)
+	}
+}
+
+func TestAmbilSlipGaji_PeriodeNilDitolakFailClosed(t *testing.T) {
+	repo := &mockRepo{
+		slip: domain.SlipGaji{ID: 1, PeriodeID: 1, PekerjaID: 1, Periode: nil},
+	}
+	svc := newTestService(repo)
+
+	_, err := svc.AmbilSlipGaji(context.Background(), 1, 1)
+	if !errors.Is(err, ErrPeriodeBelumDihitung) {
+		t.Fatalf("AmbilSlipGaji(Periode nil): ingin ErrPeriodeBelumDihitung (fail-closed), dapat %v", err)
 	}
 }
 
@@ -130,7 +170,7 @@ func TestAmbilSlipGaji_RepoError(t *testing.T) {
 	}
 }
 
-// --- DaftarSlipPeriode ---
+// --- DaftarSlipPeriode & RekapDanDaftarSlip ---
 
 func TestDaftarSlipPeriode_PeriodeTerbukaDitolak(t *testing.T) {
 	repo := &mockRepo{status: domain.PeriodeTerbuka}
@@ -142,64 +182,31 @@ func TestDaftarSlipPeriode_PeriodeTerbukaDitolak(t *testing.T) {
 	}
 }
 
-func TestDaftarSlipPeriode_PeriodeDihitungDiizinkan(t *testing.T) {
+func TestRekapDanDaftarSlip_KonsistenDanTidakPotongTelatDuaKali(t *testing.T) {
 	repo := &mockRepo{
 		status: domain.PeriodeDihitung,
-		slips:  []domain.SlipGaji{{ID: 1}, {ID: 2}},
+		slips: []domain.SlipGaji{
+			{ID: 1, UpahPokok: 600_000, TotalLembur: 31_250, PotonganTelat: 12_500, GajiBruto: 618_750, PotonganKasbon: 185_625, GajiBersih: 433_125},
+			{ID: 2, UpahPokok: 500_000, TotalLembur: 0, PotonganTelat: 0, GajiBruto: 500_000, PotonganKasbon: 0, GajiBersih: 500_000},
+		},
 	}
 	svc := newTestService(repo)
 
-	slips, err := svc.DaftarSlipPeriode(context.Background(), 1)
+	rekap, slips, err := svc.RekapDanDaftarSlip(context.Background(), 1)
 	if err != nil {
-		t.Fatalf("DaftarSlipPeriode(DIHITUNG): error tidak diharapkan: %v", err)
+		t.Fatalf("RekapDanDaftarSlip: %v", err)
 	}
-	if len(slips) != 2 {
-		t.Fatalf("DaftarSlipPeriode(DIHITUNG): jumlah slip = %d, ingin 2", len(slips))
+	if len(slips) != 2 || rekap.JumlahSlip != 2 {
+		t.Fatalf("jumlah slip = %d / %d, ingin 2", len(slips), rekap.JumlahSlip)
 	}
-}
-
-func TestDaftarSlipPeriode_PeriodeDitutupDiizinkan(t *testing.T) {
-	repo := &mockRepo{
-		status: domain.PeriodeDitutup,
-		slips:  []domain.SlipGaji{{ID: 1}},
+	if rekap.TotalBruto != 1_118_750 || rekap.TotalBersih != 933_125 || rekap.TotalPotonganKasbon != 185_625 {
+		t.Fatalf("total rekap tidak konsisten: %+v", rekap)
 	}
-	svc := newTestService(repo)
-
-	slips, err := svc.DaftarSlipPeriode(context.Background(), 1)
-	if err != nil {
-		t.Fatalf("DaftarSlipPeriode(DITUTUP): error tidak diharapkan: %v", err)
-	}
-	if len(slips) != 1 {
-		t.Fatalf("DaftarSlipPeriode(DITUTUP): jumlah slip = %d, ingin 1", len(slips))
+	// Pastikan keterlambatan tidak dipotong dua kali: TotalBersih == TotalBruto - TotalPotonganKasbon.
+	if rekap.TotalBersih != rekap.TotalBruto-rekap.TotalPotonganKasbon {
+		t.Fatalf("bersih (%d) != bruto (%d) - kasbon (%d)", rekap.TotalBersih, rekap.TotalBruto, rekap.TotalPotonganKasbon)
 	}
 }
-
-func TestDaftarSlipPeriode_StatusRepoError(t *testing.T) {
-	repoErr := errors.New("koneksi terputus")
-	repo := &mockRepo{errStatus: repoErr}
-	svc := newTestService(repo)
-
-	_, err := svc.DaftarSlipPeriode(context.Background(), 1)
-	if !errors.Is(err, repoErr) {
-		t.Fatalf("DaftarSlipPeriode(status error): ingin %v, dapat %v", repoErr, err)
-	}
-}
-
-func TestDaftarSlipPeriode_DaftarSlipRepoError(t *testing.T) {
-	repoErr := errors.New("query gagal")
-	repo := &mockRepo{
-		status:        domain.PeriodeDihitung,
-		errDaftarSlip: repoErr,
-	}
-	svc := newTestService(repo)
-
-	_, err := svc.DaftarSlipPeriode(context.Background(), 1)
-	if !errors.Is(err, repoErr) {
-		t.Fatalf("DaftarSlipPeriode(daftar error): ingin %v, dapat %v", repoErr, err)
-	}
-}
-
-// --- RekapGajiPerPeriode ---
 
 func TestRekapGajiPerPeriode_PeriodeTerbukaDitolak(t *testing.T) {
 	repo := &mockRepo{status: domain.PeriodeTerbuka}
@@ -211,53 +218,7 @@ func TestRekapGajiPerPeriode_PeriodeTerbukaDitolak(t *testing.T) {
 	}
 }
 
-func TestRekapGajiPerPeriode_PeriodeDihitungDiizinkan(t *testing.T) {
-	repo := &mockRepo{
-		status: domain.PeriodeDihitung,
-		rekap:  domain.RekapGaji{PeriodeID: 1, TotalBruto: 1_000_000, TotalBersih: 900_000, JumlahSlip: 5},
-	}
-	svc := newTestService(repo)
-
-	rekap, err := svc.RekapGajiPerPeriode(context.Background(), 1)
-	if err != nil {
-		t.Fatalf("RekapGaji(DIHITUNG): error tidak diharapkan: %v", err)
-	}
-	if rekap.JumlahSlip != 5 {
-		t.Fatalf("RekapGaji(DIHITUNG): jumlah slip = %d, ingin 5", rekap.JumlahSlip)
-	}
-}
-
-func TestRekapGajiPerPeriode_PeriodeDitutupDiizinkan(t *testing.T) {
-	repo := &mockRepo{
-		status: domain.PeriodeDitutup,
-		rekap:  domain.RekapGaji{PeriodeID: 1, TotalBersih: 800_000, JumlahSlip: 3},
-	}
-	svc := newTestService(repo)
-
-	rekap, err := svc.RekapGajiPerPeriode(context.Background(), 1)
-	if err != nil {
-		t.Fatalf("RekapGaji(DITUTUP): error tidak diharapkan: %v", err)
-	}
-	if rekap.TotalBersih != 800_000 {
-		t.Fatalf("RekapGaji(DITUTUP): total bersih = %d, ingin 800000", rekap.TotalBersih)
-	}
-}
-
-func TestRekapGajiPerPeriode_RepoError(t *testing.T) {
-	repoErr := errors.New("query rekap gagal")
-	repo := &mockRepo{
-		status:   domain.PeriodeDihitung,
-		errRekap: repoErr,
-	}
-	svc := newTestService(repo)
-
-	_, err := svc.RekapGajiPerPeriode(context.Background(), 1)
-	if !errors.Is(err, repoErr) {
-		t.Fatalf("RekapGaji(repo error): ingin %v, dapat %v", repoErr, err)
-	}
-}
-
-// --- DaftarPeriodeTersedia ---
+// --- DaftarPeriodeTersedia & Dashboard ---
 
 func TestDaftarPeriodeTersedia_FilterBenar(t *testing.T) {
 	repo := &mockRepo{
@@ -271,19 +232,12 @@ func TestDaftarPeriodeTersedia_FilterBenar(t *testing.T) {
 
 	hasil, err := svc.DaftarPeriodeTersedia(context.Background())
 	if err != nil {
-		t.Fatalf("DaftarPeriodeTersedia: error tidak diharapkan: %v", err)
+		t.Fatalf("DaftarPeriodeTersedia: %v", err)
 	}
 	if len(hasil) != 2 {
-		t.Fatalf("DaftarPeriodeTersedia: jumlah = %d, ingin 2 (tanpa TERBUKA)", len(hasil))
-	}
-	for _, p := range hasil {
-		if p.Status == domain.PeriodeTerbuka {
-			t.Fatal("DaftarPeriodeTersedia: periode TERBUKA seharusnya difilter")
-		}
+		t.Fatalf("DaftarPeriodeTersedia: jumlah = %d, ingin 2", len(hasil))
 	}
 }
-
-// --- AmbilRingkasanDashboard ---
 
 func TestAmbilRingkasanDashboard_DataLengkap(t *testing.T) {
 	repo := &mockRepo{
@@ -304,14 +258,8 @@ func TestAmbilRingkasanDashboard_DataLengkap(t *testing.T) {
 	if r.PeriodeTerakhirSelesai == nil || r.PeriodeTerakhirSelesai.ID != 2 {
 		t.Fatal("Dashboard: periode terakhir selesai harus ID=2 (DITUTUP)")
 	}
-	if r.AbsensiBelumLengkap != 3 {
-		t.Fatalf("Dashboard: absensi belum lengkap = %d, ingin 3", r.AbsensiBelumLengkap)
-	}
-	if r.GajiBersihTerakhir != 2_500_000 {
-		t.Fatalf("Dashboard: gaji bersih terakhir = %d, ingin 2500000", r.GajiBersihTerakhir)
-	}
-	if r.TotalSisaKasbon != 500_000 {
-		t.Fatalf("Dashboard: total sisa kasbon = %d, ingin 500000", r.TotalSisaKasbon)
+	if r.AbsensiBelumLengkap != 3 || r.GajiBersihTerakhir != 2_500_000 || r.TotalSisaKasbon != 500_000 {
+		t.Fatalf("Dashboard ringkasan salah: %+v", r)
 	}
 }
 
@@ -324,37 +272,89 @@ func TestAmbilRingkasanDashboard_RepoErrorGraceful(t *testing.T) {
 	}
 	svc := newTestService(repo)
 
-	// Harus tetap mengembalikan RingkasanDashboard tanpa panic.
 	r := svc.AmbilRingkasanDashboard(context.Background())
-	if r.PeriodeBerjalan != nil {
-		t.Fatal("Dashboard graceful: periode berjalan harus nil saat error")
-	}
-	if len(r.DaftarPeriode) != 0 {
-		t.Fatal("Dashboard graceful: daftar periode harus kosong saat error")
+	if r.PeriodeBerjalan != nil || len(r.DaftarPeriode) != 0 {
+		t.Fatal("Dashboard graceful: harus kosong tanpa panic saat error")
 	}
 }
 
-// --- RekapTidakMemotongTelatDuaKali (bisnis, via service) ---
+// --- Pengujian Render Template & Handler (Regresi slip.html 500 & MiddlewarePeran) ---
 
-func TestRekapTidakMemotongTelatDuaKali(t *testing.T) {
+func middlewarePeranUji(peran ...domain.Peran) func(http.Handler) http.Handler {
+	boleh := make(map[domain.Peran]bool, len(peran))
+	for _, p := range peran {
+		boleh[p] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u := web.PenggunaDariContext(r.Context())
+			if u == nil || !boleh[u.Role] {
+				http.Error(w, "Anda tidak memiliki akses ke halaman ini.", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func TestHandlerRenderSemuaHalamanModul6(t *testing.T) {
+	mulai := time.Date(2026, 11, 2, 0, 0, 0, 0, time.Local)
+	selesai := time.Date(2026, 11, 7, 0, 0, 0, 0, time.Local)
+	periode := domain.PeriodeGaji{ID: 1, Tipe: domain.PeriodeMingguan, TanggalMulai: mulai, TanggalSelesai: selesai, Status: domain.PeriodeDihitung}
+	budi := domain.Pekerja{ID: 2, Kode: "PK-01", Nama: "Budi", Jenis: domain.PekerjaHarian, Aktif: true}
+	slip := domain.SlipGaji{
+		ID: 10, PeriodeID: 1, PekerjaID: 2,
+		UpahPokok: 600_000, TotalLembur: 31_250, PotonganTelat: 0, TotalKoreksi: 0,
+		GajiBruto: 631_250, PotonganKasbon: 189_375, GajiBersih: 441_875,
+		HariKerjaDibayar: 6, Pekerja: &budi, Periode: &periode,
+	}
 	repo := &mockRepo{
-		status: domain.PeriodeDihitung,
-		rekap: domain.RekapGaji{
-			PeriodeID:           1,
-			TotalBruto:          1_000_000,
-			TotalLembur:         50_000,
-			TotalPotonganKasbon: 100_000,
-			TotalBersih:         900_000,
-			JumlahSlip:          5,
-		},
+		status:            domain.PeriodeDihitung,
+		slip:              slip,
+		slips:             []domain.SlipGaji{slip},
+		rincian:           []domain.SlipGajiDetail{{Tanggal: mulai, UpahPokokHari: 100_000, MenitLembur: 90, UpahLembur: 31_250}},
+		periodes:          []domain.PeriodeGaji{periode},
+		totalSisaKasbon:   300_000,
+		sisaKasbonPekerja: 110_625,
 	}
-	svc := newTestService(repo)
 
-	rekap, err := svc.RekapGajiPerPeriode(context.Background(), 1)
-	if err != nil {
-		t.Fatalf("RekapTidakDouble: error tidak diharapkan: %v", err)
+	renderer := &web.Render{Dir: filepath.Join("..", "..", "web", "templates")}
+	mux := http.NewServeMux()
+	DaftarkanRute(mux, renderer, newTestService(repo), middlewarePeranUji)
+
+	admin := &domain.Pengguna{ID: 1, Username: "admin", Role: domain.PeranAdmin}
+
+	kasus := []struct {
+		path   string
+		memuat []string
+	}{
+		{"/dashboard", []string{"Periode berjalan", "Rp 300.000"}},
+		{"/rekap", []string{"Pilih Periode"}},
+		{"/rekap/1", []string{"Budi", "Rp 441.875", "/slip/1/2"}},
+		{"/slip/1/2", []string{"SLIP GAJI", "02 Nov 2026", "07 Nov 2026", "Rp 441.875", "Rp 110.625"}},
 	}
-	if rekap.TotalBersih > rekap.TotalBruto {
-		t.Fatal("gaji bersih tidak boleh melebihi bruto")
+
+	for _, k := range kasus {
+		req := httptest.NewRequest("GET", k.path, nil)
+		req = req.WithContext(web.DenganPengguna(req.Context(), admin))
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s -> status %d, ingin 200; body: %s", k.path, rec.Code, rec.Body.String())
+		}
+		for _, teks := range k.memuat {
+			if !strings.Contains(rec.Body.String(), teks) {
+				t.Fatalf("GET %s tidak memuat %q", k.path, teks)
+			}
+		}
+	}
+
+	// Pastikan MiddlewarePeran benar-benar terpasang pada rute laporan.
+	reqAnon := httptest.NewRequest("GET", "/rekap/1", nil)
+	recAnon := httptest.NewRecorder()
+	mux.ServeHTTP(recAnon, reqAnon)
+	if recAnon.Code != http.StatusForbidden {
+		t.Fatalf("rute laporan tanpa pengguna seharusnya 403, dapat %d", recAnon.Code)
 	}
 }

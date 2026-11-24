@@ -264,11 +264,14 @@ func TestTutupPeriodeBerhasil(t *testing.T) {
 	mock.ExpectQuery(q("SELECT status FROM periode_gaji WHERE tipe=? AND tanggal_selesai<? ORDER BY tanggal_selesai DESC LIMIT 1 FOR UPDATE")).
 		WithArgs(domain.PeriodeMingguan, "2026-11-02").
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("DITUTUP"))
+	mock.ExpectQuery(q("SELECT COALESCE(SUM(total_koreksi),0) FROM slip_gaji WHERE periode_id=?")).
+		WithArgs(int64(5)).
+		WillReturnRows(sqlmock.NewRows([]string{"sum"}).AddRow(0))
+	mock.ExpectQuery(q("SELECT COALESCE(SUM(jumlah),0) FROM koreksi_gaji WHERE periode_terapan_id=?")).
+		WithArgs(int64(5)).
+		WillReturnRows(sqlmock.NewRows([]string{"sum"}).AddRow(0))
 	mock.ExpectExec(q("UPDATE kasbon k JOIN")).
 		WithArgs(int64(5)).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(q("UPDATE koreksi_gaji k JOIN slip_gaji s ON s.pekerja_id=k.pekerja_id")).
-		WithArgs(int64(5), int64(5), int64(5)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(q("UPDATE periode_gaji SET status='DITUTUP',ditutup_pada=NOW() WHERE id=? AND status='DIHITUNG'")).
 		WithArgs(int64(5)).
@@ -334,8 +337,8 @@ func TestRingkasanTutupSebelumPenutupan(t *testing.T) {
 	mock.ExpectQuery(q("SELECT COUNT(*),COALESCE(SUM(gaji_bersih),0),COALESCE(SUM(potongan_kasbon),0) FROM slip_gaji WHERE periode_id=?")).
 		WithArgs(int64(4)).
 		WillReturnRows(sqlmock.NewRows([]string{"jumlah", "bersih", "potongan"}).AddRow(2, 500000, 100000))
-	mock.ExpectQuery(q("SELECT COUNT(*) FROM koreksi_gaji k WHERE k.periode_terapan_id=?")).
-		WithArgs(int64(4), int64(4), int64(4)).
+	mock.ExpectQuery(q("SELECT COUNT(*) FROM koreksi_gaji WHERE periode_terapan_id=?")).
+		WithArgs(int64(4)).
 		WillReturnRows(sqlmock.NewRows([]string{"jumlah"}).AddRow(1))
 
 	ring, err := svc.RingkasanTutupPeriode(context.Background(), 4)
@@ -454,6 +457,54 @@ func TestTandaiKoreksiDiterapkan(t *testing.T) {
 
 	if err := svc.TandaiKoreksiDiterapkan(context.Background(), 3); err != nil {
 		t.Fatalf("TandaiKoreksiDiterapkan: %v", err)
+	}
+	pastikanEkspektasi(t, mock)
+}
+
+func TestPeriksaPeriodeTerkunciJenis(t *testing.T) {
+	svc, mock := svcMock(t)
+	mock.ExpectQuery(q("SELECT COUNT(*) FROM periode_gaji WHERE status='DITUTUP' AND tipe=? AND ? BETWEEN tanggal_mulai AND tanggal_selesai")).
+		WithArgs(domain.PeriodeBulanan, "2026-11-05").
+		WillReturnRows(sqlmock.NewRows([]string{"jumlah"}).AddRow(0))
+
+	terkunci, err := svc.PeriksaPeriodeTerkunciJenis(context.Background(), domain.PekerjaBulanan, tanggal(2026, time.November, 5))
+	if err != nil {
+		t.Fatalf("PeriksaPeriodeTerkunciJenis: %v", err)
+	}
+	if terkunci {
+		t.Fatal("pekerja bulanan seharusnya tidak terkunci ketika hanya periode mingguan yang ditutup")
+	}
+	pastikanEkspektasi(t, mock)
+}
+
+func TestTutupPeriodeMenolakKoreksiTidakSinkron(t *testing.T) {
+	svc, mock := svcMock(t)
+	mulai := tanggal(2026, time.November, 9)
+	selesai := tanggal(2026, time.November, 14)
+
+	mock.ExpectQuery(q("SELECT id,tipe,tanggal_mulai,tanggal_selesai,status,ditutup_pada FROM periode_gaji WHERE id=?")).
+		WithArgs(int64(6)).
+		WillReturnRows(rowsPeriode().AddRow(6, "MINGGUAN", mulai, selesai, "DIHITUNG", nil))
+	mock.ExpectQuery(q("SELECT id,tipe,tanggal_mulai,tanggal_selesai,status,ditutup_pada FROM periode_gaji WHERE tipe=? AND tanggal_selesai<?")).
+		WithArgs(domain.PeriodeMingguan, "2026-11-09").
+		WillReturnRows(rowsPeriode())
+	mock.ExpectBegin()
+	mock.ExpectQuery(q("SELECT status,tipe,tanggal_mulai FROM periode_gaji WHERE id=? FOR UPDATE")).
+		WithArgs(int64(6)).
+		WillReturnRows(sqlmock.NewRows([]string{"status", "tipe", "tanggal_mulai"}).AddRow("DIHITUNG", "MINGGUAN", mulai))
+	mock.ExpectQuery(q("SELECT status FROM periode_gaji WHERE tipe=? AND tanggal_selesai<? ORDER BY tanggal_selesai DESC LIMIT 1 FOR UPDATE")).
+		WithArgs(domain.PeriodeMingguan, "2026-11-09").
+		WillReturnRows(sqlmock.NewRows([]string{"status"}))
+	mock.ExpectQuery(q("SELECT COALESCE(SUM(total_koreksi),0) FROM slip_gaji WHERE periode_id=?")).
+		WithArgs(int64(6)).
+		WillReturnRows(sqlmock.NewRows([]string{"sum"}).AddRow(50000))
+	mock.ExpectQuery(q("SELECT COALESCE(SUM(jumlah),0) FROM koreksi_gaji WHERE periode_terapan_id=?")).
+		WithArgs(int64(6)).
+		WillReturnRows(sqlmock.NewRows([]string{"sum"}).AddRow(0))
+	mock.ExpectRollback()
+
+	if err := svc.TutupPeriode(context.Background(), 6); !errors.Is(err, ErrKoreksiTidakSinkron) {
+		t.Fatalf("galat = %v, ingin ErrKoreksiTidakSinkron", err)
 	}
 	pastikanEkspektasi(t, mock)
 }

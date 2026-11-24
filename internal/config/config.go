@@ -1,7 +1,10 @@
 // Pemilik: Mahdi | Modul 1 | Aturan: 5, 6, 7, 12
 package config
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // Konstanta aturan bisnis. Angka-angka ini tidak boleh tersebar di kode.
 const (
@@ -26,6 +29,7 @@ type Config struct {
 	SessionSecret string
 	TemplateDir   string
 	StaticDir     string
+	SecureCookie  bool
 }
 
 // Muat membaca konfigurasi dari environment dengan nilai default lokal.
@@ -42,6 +46,7 @@ func Muat() Config {
 		SessionSecret: os.Getenv("SESSION_SECRET"),
 		TemplateDir:   env("TEMPLATE_DIR", "web/templates"),
 		StaticDir:     env("STATIC_DIR", "web/static"),
+		SecureCookie:  strings.EqualFold(strings.TrimSpace(os.Getenv("SECURE_COOKIE")), "true"),
 	}
 }
 

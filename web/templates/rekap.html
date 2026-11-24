@@ -21,10 +21,10 @@
 
 {{if gt $isi.PeriodeID 0}}
 <section class="card-grid" aria-label="Ringkasan rekap">
-  <article class="card"><h2>Biaya gaji bruto</h2><p class="angka">Rp {{$isi.Rekap.TotalBruto}}</p></article>
-  <article class="card"><h2>Total lembur</h2><p class="angka">Rp {{$isi.Rekap.TotalLembur}}</p></article>
-  <article class="card"><h2>Total potongan kasbon</h2><p class="angka">Rp {{$isi.Rekap.TotalPotonganKasbon}}</p></article>
-  <article class="card"><h2>Gaji dibayarkan</h2><p class="angka">Rp {{$isi.Rekap.TotalBersih}}</p></article>
+  <article class="card"><h2>Biaya gaji bruto</h2><p class="angka">{{rupiah $isi.Rekap.TotalBruto}}</p></article>
+  <article class="card"><h2>Total lembur</h2><p class="angka">{{rupiah $isi.Rekap.TotalLembur}}</p></article>
+  <article class="card"><h2>Total potongan kasbon</h2><p class="angka">{{rupiah $isi.Rekap.TotalPotonganKasbon}}</p></article>
+  <article class="card"><h2>Gaji dibayarkan</h2><p class="angka">{{rupiah $isi.Rekap.TotalBersih}}</p></article>
 </section>
 
 <section class="panel">
@@ -32,16 +32,16 @@
   <div class="tabel-wrap">
     <table>
       <thead>
-        <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan</th><th>Bersih</th><th>Aksi</th></tr>
+        <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan Kasbon</th><th>Bersih</th><th>Aksi</th></tr>
       </thead>
       <tbody>
         {{range $isi.Harian}}
         <tr>
           <td>{{if .Pekerja}}{{.Pekerja.Nama}}{{else}}-{{end}}</td>
-          <td>Rp {{.TotalLembur}}</td>
-          <td>Rp {{.GajiBruto}}</td>
-          <td>Rp {{.PotonganKasbon}}</td>
-          <td>Rp {{.GajiBersih}}</td>
+          <td>{{rupiah .TotalLembur}}</td>
+          <td>{{rupiah .GajiBruto}}</td>
+          <td>{{rupiah .PotonganKasbon}}</td>
+          <td>{{rupiah .GajiBersih}}</td>
           <td><a href="/slip/{{.PeriodeID}}/{{.PekerjaID}}">Lihat slip</a></td>
         </tr>
         {{else}}
@@ -57,16 +57,16 @@
   <div class="tabel-wrap">
     <table>
       <thead>
-        <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan</th><th>Bersih</th><th>Aksi</th></tr>
+        <tr><th>Pekerja</th><th>Lembur</th><th>Bruto</th><th>Potongan Kasbon</th><th>Bersih</th><th>Aksi</th></tr>
       </thead>
       <tbody>
         {{range $isi.Bulanan}}
         <tr>
           <td>{{if .Pekerja}}{{.Pekerja.Nama}}{{else}}-{{end}}</td>
-          <td>Rp {{.TotalLembur}}</td>
-          <td>Rp {{.GajiBruto}}</td>
-          <td>Rp {{.PotonganKasbon}}</td>
-          <td>Rp {{.GajiBersih}}</td>
+          <td>{{rupiah .TotalLembur}}</td>
+          <td>{{rupiah .GajiBruto}}</td>
+          <td>{{rupiah .PotonganKasbon}}</td>
+          <td>{{rupiah .GajiBersih}}</td>
           <td><a href="/slip/{{.PeriodeID}}/{{.PekerjaID}}">Lihat slip</a></td>
         </tr>
         {{else}}

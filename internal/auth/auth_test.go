@@ -5,7 +5,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,7 +69,7 @@ func TestPeriksaPasswordSalahDitolak(t *testing.T) {
 	}
 }
 
-// --- Sesi ---
+// --- Sesi & Secure Cookie ---
 
 func TestSesiDibuatDanDihapus(t *testing.T) {
 	p := domain.Pengguna{ID: 1, Username: "admin", Role: domain.PeranAdmin}
@@ -74,12 +77,15 @@ func TestSesiDibuatDanDihapus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buat sesi: %v", err)
 	}
-	got := AmbilSesi(id)
+	got, csrf := ambilEntriSesi(id)
 	if got == nil {
 		t.Fatal("sesi seharusnya ditemukan setelah dibuat")
 	}
 	if got.Username != "admin" {
 		t.Fatalf("username sesi salah: %s", got.Username)
+	}
+	if !tokenHexValid(csrf) {
+		t.Fatalf("sesi harus memiliki token CSRF terikat yang valid, dapat %q", csrf)
 	}
 	HapusSesi(id)
 	if AmbilSesi(id) != nil {
@@ -87,18 +93,33 @@ func TestSesiDibuatDanDihapus(t *testing.T) {
 	}
 }
 
+func TestSetSecureCookieBerlakuDinamis(t *testing.T) {
+	defer SetSecureCookie(false)
+
+	SetSecureCookie(true)
+	c := buatCookieSesi("abc", 3600)
+	if !c.Secure || !c.HttpOnly || c.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("cookie sesi tidak memenuhi atribut keamanan: %+v", c)
+	}
+
+	SetSecureCookie(false)
+	c2 := buatCookieSesi("abc", 3600)
+	if c2.Secure {
+		t.Fatal("cookie seharusnya tidak Secure saat flag false")
+	}
+}
+
 func TestBersihkanSesiKedaluwarsa(t *testing.T) {
 	p := domain.Pengguna{ID: 10, Username: "expire-test", Role: domain.PeranAdmin}
 
-	// Buat sesi yang sudah kedaluwarsa langsung via store.
 	muSesi.Lock()
 	storeSesi["test-expired"] = entriSesi{
 		pengguna:    p,
+		csrfToken:   "expired-token",
 		kedaluwarsa: time.Now().Add(-1 * time.Hour),
 	}
 	muSesi.Unlock()
 
-	// Buat sesi aktif.
 	activeID, err := BuatSesi(p)
 	if err != nil {
 		t.Fatalf("buat sesi aktif: %v", err)
@@ -107,38 +128,18 @@ func TestBersihkanSesiKedaluwarsa(t *testing.T) {
 
 	bersihkanSesiKedaluwarsa()
 
-	// Sesi kedaluwarsa harus sudah dihapus.
 	muSesi.RLock()
 	_, masihAda := storeSesi["test-expired"]
 	muSesi.RUnlock()
 	if masihAda {
 		t.Fatal("sesi kedaluwarsa seharusnya dihapus oleh cleanup")
 	}
-
-	// Sesi aktif harus masih ada.
 	if AmbilSesi(activeID) == nil {
 		t.Fatal("sesi aktif seharusnya tidak dihapus oleh cleanup")
 	}
 }
 
-func TestLogoutMenghapusSesi(t *testing.T) {
-	p := domain.Pengguna{ID: 1, Username: "admin", Role: domain.PeranAdmin}
-	sessionID, _ := BuatSesi(p)
-
-	// Pastikan sesi ada.
-	if AmbilSesi(sessionID) == nil {
-		t.Fatal("sesi harus ada sebelum logout")
-	}
-
-	HapusSesi(sessionID)
-
-	// Pastikan sesi sudah dihapus — pengguna tidak bisa pakai session lama.
-	if AmbilSesi(sessionID) != nil {
-		t.Fatal("sesi seharusnya sudah dihapus setelah logout")
-	}
-}
-
-// --- Middleware ---
+// --- Middleware & RBAC ---
 
 func TestMiddlewarePeranMenolakPemilikDiHalamanAdmin(t *testing.T) {
 	pemilik := &domain.Pengguna{ID: 2, Username: "pemilik", Role: domain.PeranPemilik}
@@ -153,6 +154,9 @@ func TestMiddlewarePeranMenolakPemilikDiHalamanAdmin(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("pemilik di rute admin seharusnya 403, dapat %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Anda tidak memiliki akses ke halaman ini.") {
+		t.Fatalf("pesan 403 tidak sesuai: %q", rec.Body.String())
 	}
 }
 
@@ -182,24 +186,46 @@ func TestMiddlewareAuthRedirectTanpaSesi(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("tanpa sesi seharusnya redirect 303, dapat %d", rec.Code)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
+		t.Fatalf("tanpa sesi seharusnya 303 -> /login, dapat %d -> %s", rec.Code, rec.Header().Get("Location"))
 	}
-	if loc := rec.Header().Get("Location"); loc != "/login" {
-		t.Fatalf("redirect seharusnya ke /login, dapat %s", loc)
+	if rec.Header().Get("X-Frame-Options") != "DENY" || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("header keamanan harus terpasang pada respons")
 	}
 }
 
-func TestMiddlewareAuthLoloskanSesiSah(t *testing.T) {
+func TestMiddlewareAuthMenolakSesiPalsuAtauKedaluwarsa(t *testing.T) {
+	dipanggil := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dipanggil = true
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := MiddlewareAuth(inner)
+
+	req := httptest.NewRequest("GET", "/dashboard", nil)
+	req.AddCookie(&http.Cookie{Name: namaCookie, Value: "sesi-tidak-ada"})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if dipanggil {
+		t.Fatal("handler dalam tidak boleh dipanggil untuk sesi palsu")
+	}
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
+		t.Fatalf("sesi palsu seharusnya redirect 303 -> /login, dapat %d", rec.Code)
+	}
+}
+
+func TestMiddlewareAuthLoloskanSesiSahDanSediakanCSRF(t *testing.T) {
 	p := domain.Pengguna{ID: 1, Username: "admin", Role: domain.PeranAdmin}
 	sessionID, _ := BuatSesi(p)
 	defer HapusSesi(sessionID)
 
+	var tokenDariCtx string
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pengguna := web.PenggunaDariContext(r.Context())
-		if pengguna == nil {
+		if web.PenggunaDariContext(r.Context()) == nil {
 			t.Error("pengguna seharusnya ada di context")
 		}
+		tokenDariCtx = web.CSRFTokenDariContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 	handler := MiddlewareAuth(inner)
@@ -209,12 +235,70 @@ func TestMiddlewareAuthLoloskanSesiSah(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("sesi sah seharusnya 200, dapat %d", rec.Code)
+	if rec.Code != http.StatusOK || tokenDariCtx == "" {
+		t.Fatalf("sesi sah seharusnya 200 dengan CSRF token, dapat %d token=%q", rec.Code, tokenDariCtx)
 	}
 }
 
-func TestStaticDapatDiaksesToanpaSesi(t *testing.T) {
+func TestMiddlewareAuthMenolakPOSTLintasSesiDanTanpaCSRF(t *testing.T) {
+	korbanID, _ := BuatSesi(domain.Pengguna{ID: 1, Username: "admin", Role: domain.PeranAdmin})
+	defer HapusSesi(korbanID)
+	penyerangID, _ := BuatSesi(domain.Pengguna{ID: 2, Username: "other", Role: domain.PeranAdmin})
+	defer HapusSesi(penyerangID)
+
+	_, csrfKorban := ambilEntriSesi(korbanID)
+	_, csrfPenyerang := ambilEntriSesi(penyerangID)
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := MiddlewareAuth(inner)
+
+	// 1. Tanpa CSRF token -> 403
+	req1 := httptest.NewRequest("POST", "/pekerja/baru", strings.NewReader("kode=X"))
+	req1.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req1.AddCookie(&http.Cookie{Name: namaCookie, Value: korbanID})
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusForbidden {
+		t.Fatalf("POST tanpa CSRF seharusnya 403, dapat %d", rec1.Code)
+	}
+
+	// 2. Pakai CSRF token sesi lain -> 403 (anti cross-session bypass)
+	req2 := httptest.NewRequest("POST", "/pekerja/baru", strings.NewReader("csrf_token="+csrfPenyerang))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.AddCookie(&http.Cookie{Name: namaCookie, Value: korbanID})
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusForbidden {
+		t.Fatalf("POST dengan CSRF sesi lain seharusnya 403, dapat %d", rec2.Code)
+	}
+
+	// 3. Body rusak (fail-closed) -> 403
+	req3 := httptest.NewRequest("POST", "/logout", strings.NewReader("bad=%ZZ"))
+	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req3.AddCookie(&http.Cookie{Name: namaCookie, Value: korbanID})
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusForbidden {
+		t.Fatalf("POST dengan form rusak seharusnya 403, dapat %d", rec3.Code)
+	}
+	if AmbilSesi(korbanID) == nil {
+		t.Fatal("sesi korban tidak boleh terhapus oleh POST fail-open")
+	}
+
+	// 4. Token milik sesi sendiri -> 200
+	req4 := httptest.NewRequest("POST", "/pekerja/baru", strings.NewReader("csrf_token="+csrfKorban))
+	req4.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req4.AddCookie(&http.Cookie{Name: namaCookie, Value: korbanID})
+	rec4 := httptest.NewRecorder()
+	handler.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusOK {
+		t.Fatalf("POST dengan CSRF sah seharusnya 200, dapat %d", rec4.Code)
+	}
+}
+
+func TestStaticDapatDiaksesTanpaSesi(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -229,31 +313,80 @@ func TestStaticDapatDiaksesToanpaSesi(t *testing.T) {
 	}
 }
 
-func TestMiddlewareAuthMenyediakanCSRFToken(t *testing.T) {
-	p := domain.Pengguna{ID: 1, Username: "admin", Role: domain.PeranAdmin}
-	sessionID, _ := BuatSesi(p)
-	defer HapusSesi(sessionID)
+// --- Handler Login / Logout ---
 
-	var tokenDariCtx string
-	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokenDariCtx = web.CSRFTokenDariContext(r.Context())
-		w.WriteHeader(http.StatusOK)
-	})
-	handler := MiddlewareAuth(inner)
+func TestLoginHandlerRedirectSaatSudahLogin(t *testing.T) {
+	renderer := &web.Render{Dir: filepath.Join("..", "..", "web", "templates")}
+	mux := http.NewServeMux()
+	DaftarkanRute(mux, renderer, NewService(nil))
+	handler := MiddlewareAuth(mux)
 
-	req := httptest.NewRequest("GET", "/dashboard", nil)
-	req.AddCookie(&http.Cookie{Name: namaCookie, Value: sessionID})
+	sid, _ := BuatSesi(domain.Pengguna{ID: 1, Username: "admin", Role: domain.PeranAdmin})
+	defer HapusSesi(sid)
+
+	req := httptest.NewRequest("GET", "/login", nil)
+	req.AddCookie(&http.Cookie{Name: namaCookie, Value: sid})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if tokenDariCtx == "" {
-		t.Fatal("middleware auth seharusnya menyediakan CSRF token di context")
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/dashboard" {
+		t.Fatalf("user sudah login di GET /login seharusnya 303 -> /dashboard, dapat %d -> %s", rec.Code, rec.Header().Get("Location"))
 	}
 }
 
-// --- Rate Limiting ---
+func TestProsesLoginMenolakCSRFInvalidDanMencatatRateLimit(t *testing.T) {
+	renderer := &web.Render{Dir: filepath.Join("..", "..", "web", "templates")}
+	h := NewHandler(renderer, NewService(nil))
+	user := "uji-handler-rl"
+	defer resetRateLimit(user)
 
-func TestRateLimitMemblokirSetelahMaxPercobaan(t *testing.T) {
+	// 1. Tanpa cookie CSRF -> 403
+	reqBad := httptest.NewRequest("POST", "/login", strings.NewReader("csrf_token=palsu&username="+user+"&password=x"))
+	reqBad.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recBad := httptest.NewRecorder()
+	h.ProsesLogin(recBad, reqBad)
+	if recBad.Code != http.StatusForbidden {
+		t.Fatalf("login dengan CSRF invalid seharusnya 403, dapat %d", recBad.Code)
+	}
+
+	// 2. Ambil cookie CSRF sah lewat GET /login lalu gagal 5x -> ke-6 harus 429
+	recGet := httptest.NewRecorder()
+	h.Login(recGet, httptest.NewRequest("GET", "/login", nil))
+	var csrfCookie *http.Cookie
+	for _, c := range recGet.Result().Cookies() {
+		if c.Name == namaCookieCSRF {
+			csrfCookie = c
+		}
+	}
+	if csrfCookie == nil {
+		t.Fatal("GET /login harus menyetel cookie CSRF")
+	}
+
+	for i := 0; i < maxPercobaanLogin; i++ {
+		req := httptest.NewRequest("POST", "/login", strings.NewReader("csrf_token="+csrfCookie.Value+"&username="+user+"&password=salah"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(csrfCookie)
+		rec := httptest.NewRecorder()
+		h.ProsesLogin(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("percobaan %d seharusnya 401, dapat %d", i+1, rec.Code)
+		}
+	}
+
+	// Percobaan ke-6 (bahkan dengan huruf kapital!) harus 429
+	req6 := httptest.NewRequest("POST", "/login", strings.NewReader("csrf_token="+csrfCookie.Value+"&username="+strings.ToUpper(user)+"&password=salah"))
+	req6.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req6.AddCookie(csrfCookie)
+	rec6 := httptest.NewRecorder()
+	h.ProsesLogin(rec6, req6)
+	if rec6.Code != http.StatusTooManyRequests {
+		t.Fatalf("percobaan ke-6 seharusnya 429, dapat %d", rec6.Code)
+	}
+}
+
+// --- Rate Limiting (Case-insensitive, Anti-TOCTOU, Anti Early-Unlock) ---
+
+func TestRateLimitMemblokirSetelahMaxPercobaanDanCaseInsensitive(t *testing.T) {
 	user := "test-ratelimit-user"
 	defer resetRateLimit(user)
 
@@ -266,6 +399,59 @@ func TestRateLimitMemblokirSetelahMaxPercobaan(t *testing.T) {
 
 	if !cekRateLimit(user) {
 		t.Fatal("seharusnya dikunci setelah maxPercobaanLogin percobaan gagal")
+	}
+	if !cekRateLimit("TEST-RATELIMIT-USER") || !cekRateLimit("  Test-RateLimit-User ") {
+		t.Fatal("rate limit harus case-insensitive agar tidak bisa dibypass kolasi MySQL")
+	}
+}
+
+func TestRateLimitKonkurenAntiTOCTOU(t *testing.T) {
+	user := "test-toctou-burst"
+	defer resetRateLimit(user)
+
+	const totalReq = 12
+	var lolos atomic.Int32
+	var wg sync.WaitGroup
+	mulai := make(chan struct{})
+
+	for i := 0; i < totalReq; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-mulai
+			if mulaiPercobaanLogin(user) {
+				lolos.Add(1)
+				time.Sleep(15 * time.Millisecond)
+				selesaiPercobaanLogin(user, false, true)
+			}
+		}()
+	}
+	close(mulai)
+	wg.Wait()
+
+	if got := int(lolos.Load()); got != maxPercobaanLogin {
+		t.Fatalf("konkuren burst: lolos=%d, seharusnya tepat %d (anti-TOCTOU)", got, maxPercobaanLogin)
+	}
+	if !cekRateLimit(user) {
+		t.Fatal("username harus terkunci setelah burst gagal")
+	}
+}
+
+func TestRateLimitTidakBukaKunciLebihAwal(t *testing.T) {
+	user := "test-no-early-unlock"
+	defer resetRateLimit(user)
+
+	muRL.Lock()
+	storeRL[kunciRateLimit(user)] = &statusRateLimit{
+		percobaan:   maxPercobaanLogin,
+		pertama:     time.Now().Add(-10 * time.Minute), // lewat jendelaRateLimit (5m)
+		dikunciSamp: time.Now().Add(10 * time.Minute),  // namun masih dikunci 10m lagi!
+	}
+	muRL.Unlock()
+
+	catatGagalLogin(user)
+	if !cekRateLimit(user) {
+		t.Fatal("catatGagalLogin tidak boleh membatalkan kunci yang masih aktif")
 	}
 }
 
@@ -284,9 +470,8 @@ func TestRateLimitResetSetelahLoginBerhasil(t *testing.T) {
 func TestBersihkanRateLimitKedaluwarsa(t *testing.T) {
 	user := "test-cleanup-rl"
 
-	// Masukkan entri yang sudah lewat jendelanya.
 	muRL.Lock()
-	storeRL[user] = &statusRateLimit{
+	storeRL[kunciRateLimit(user)] = &statusRateLimit{
 		percobaan: 1,
 		pertama:   time.Now().Add(-10 * time.Minute),
 	}
@@ -295,92 +480,45 @@ func TestBersihkanRateLimitKedaluwarsa(t *testing.T) {
 	bersihkanRateLimitKedaluwarsa()
 
 	muRL.Lock()
-	_, masih := storeRL[user]
+	_, masih := storeRL[kunciRateLimit(user)]
 	muRL.Unlock()
 	if masih {
 		t.Fatal("entri rate limit kedaluwarsa seharusnya dihapus oleh cleanup")
 	}
 }
 
-// --- CSRF ---
+// --- CSRF Double-Submit Cookie (Pra-login) ---
 
-func TestCSRFTokenDibuatDanDivalidasi(t *testing.T) {
+func TestCSRFDoubleSubmitDibuatDanDivalidasi(t *testing.T) {
 	rec := httptest.NewRecorder()
 	token := buatTokenCSRF(rec)
-	if token == "" {
-		t.Fatal("CSRF token tidak boleh kosong")
+	if !tokenHexValid(token) {
+		t.Fatalf("CSRF token tidak valid: %q", token)
 	}
-
-	// Simulasikan form POST dengan token.
-	req := httptest.NewRequest("POST", "/login", strings.NewReader("csrf_token="+token+"&username=x&password=y"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if err := req.ParseForm(); err != nil {
-		t.Fatalf("parse form: %v", err)
-	}
-
-	if !periksaCSRF(req) {
-		t.Fatal("CSRF token yang valid seharusnya diterima")
-	}
-}
-
-func TestCSRFTokenInvalidDitolak(t *testing.T) {
-	req := httptest.NewRequest("POST", "/login", strings.NewReader("csrf_token=token-palsu&username=x&password=y"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if err := req.ParseForm(); err != nil {
-		t.Fatalf("parse form: %v", err)
-	}
-
-	if periksaCSRF(req) {
-		t.Fatal("CSRF token palsu seharusnya ditolak")
-	}
-}
-
-func TestCSRFTokenKosongDitolak(t *testing.T) {
-	req := httptest.NewRequest("POST", "/login", strings.NewReader("username=x&password=y"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if err := req.ParseForm(); err != nil {
-		t.Fatalf("parse form: %v", err)
-	}
-
-	if periksaCSRF(req) {
-		t.Fatal("form tanpa CSRF token seharusnya ditolak")
-	}
-}
-
-func TestHapusTokenCSRFKedaluwarsa(t *testing.T) {
-	token := "test-csrf-expired"
-	muCSRF.Lock()
-	storeCSRF[token] = time.Now().Add(-1 * time.Hour)
-	muCSRF.Unlock()
-
-	hapusTokenCSRFKedaluwarsa()
-
-	muCSRF.RLock()
-	_, masih := storeCSRF[token]
-	muCSRF.RUnlock()
-	if masih {
-		t.Fatal("CSRF token kedaluwarsa seharusnya dihapus oleh cleanup")
-	}
-}
-
-func TestAmbilTokenCSRFMembuatBaruJikaTidakAda(t *testing.T) {
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/login", nil)
-
-	token := ambilTokenCSRF(rec, req)
-	if token == "" {
-		t.Fatal("ambilTokenCSRF harus mengembalikan token baru jika tidak ada cookie")
-	}
-
-	// Harus ada cookie CSRF di response.
-	cookies := rec.Result().Cookies()
-	found := false
-	for _, c := range cookies {
-		if c.Name == namaCookieCSRF && c.Value == token {
-			found = true
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == namaCookieCSRF {
+			cookie = c
 		}
 	}
-	if !found {
-		t.Fatal("cookie CSRF harus di-set saat membuat token baru")
+	if cookie == nil || !cookie.HttpOnly {
+		t.Fatal("cookie CSRF harus terpasang dan HttpOnly")
+	}
+
+	// Cocok antara cookie dan form -> valid
+	req := httptest.NewRequest("POST", "/login", strings.NewReader("csrf_token="+token))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	_ = req.ParseForm()
+	if !periksaCSRF(req) {
+		t.Fatal("CSRF token yang cocok dengan cookie seharusnya diterima")
+	}
+
+	// Form valid tapi tanpa cookie (atau cookie berbeda) -> ditolak
+	reqNoCookie := httptest.NewRequest("POST", "/login", strings.NewReader("csrf_token="+token))
+	reqNoCookie.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_ = reqNoCookie.ParseForm()
+	if periksaCSRF(reqNoCookie) {
+		t.Fatal("CSRF token tanpa cookie pasangan seharusnya ditolak")
 	}
 }

@@ -3,8 +3,10 @@ package periode
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"penggajian-konveksi/internal/domain"
@@ -39,6 +41,7 @@ type tutupPage struct {
 	Periode     domain.PeriodeGaji
 	Ringkasan   RingkasanTutup
 	BisaDitutup bool
+	Alasan      string
 }
 type koreksiPage struct {
 	Koreksi []domain.KoreksiGaji
@@ -46,31 +49,54 @@ type koreksiPage struct {
 	Pekerja []domain.Pekerja
 }
 
-func galatAksi(w http.ResponseWriter, e error, pesan string) {
+func adalahGalatBisnis(e error) bool {
+	if errors.Is(e, ErrPeriodeTumpangTindih) || errors.Is(e, ErrKoreksiTidakSinkron) {
+		return true
+	}
+	msg := e.Error()
+	for _, prefiks := range []string{
+		"tanggal mulai", "periode mingguan", "periode bulanan", "tipe periode",
+		"periode bertumpang tindih", "periode hanya dapat ditutup", "periode sebelumnya",
+		"pekerja wajib", "pekerja tidak ditemukan", "nominal koreksi", "alasan koreksi",
+		"koreksi hanya dapat", "status periode", "gunakan TutupPeriode",
+	} {
+		if strings.Contains(msg, prefiks) {
+			return true
+		}
+	}
+	return false
+}
+
+func galatAksi(w http.ResponseWriter, r *http.Request, e error, pesan string) {
 	switch {
 	case errors.Is(e, ErrPeriodeTidakDitemukan):
 		http.Error(w, ErrPeriodeTidakDitemukan.Error(), http.StatusNotFound)
 	case errors.Is(e, ErrPeriodeSudahDitutup):
 		http.Error(w, ErrPeriodeSudahDitutup.Error(), http.StatusConflict)
 	case errors.Is(e, ErrDatabasePeriodeTidakTersedia):
-		http.Error(w, pesan+": "+e.Error(), http.StatusInternalServerError)
-	default:
+		log.Printf("periode handler %s %s: %v", r.Method, r.URL.Path, e)
+		http.Error(w, pesan+". Database belum tersedia.", http.StatusInternalServerError)
+	case adalahGalatBisnis(e):
 		http.Error(w, pesan+": "+e.Error(), http.StatusBadRequest)
+	default:
+		log.Printf("periode handler %s %s: %v", r.Method, r.URL.Path, e)
+		http.Error(w, pesan+". Terjadi kesalahan pada server.", http.StatusInternalServerError)
 	}
 }
 
-func galatServer(w http.ResponseWriter, e error, pesan string) {
+func galatServer(w http.ResponseWriter, r *http.Request, e error, pesan string) {
 	if errors.Is(e, ErrPeriodeTidakDitemukan) {
 		http.Error(w, ErrPeriodeTidakDitemukan.Error(), http.StatusNotFound)
 		return
 	}
-	http.Error(w, pesan+": "+e.Error(), http.StatusInternalServerError)
+	log.Printf("periode handler %s %s: %v", r.Method, r.URL.Path, e)
+	http.Error(w, pesan+". Terjadi kesalahan pada server.", http.StatusInternalServerError)
 }
 
 func (h *Handler) Daftar(w http.ResponseWriter, r *http.Request) {
 	ps, e := h.service.DaftarPeriode(r.Context())
 	if e != nil {
-		galatServer(w, e, "Gagal mengambil periode")
+		galatServer(w, r, e, "Gagal mengambil periode")
 		return
 	}
 	h.renderer.Render(w, r, "periode.html", web.Data{Judul: "Periode Gaji", Aktif: "periode", Isi: periodePage{Periode: ps}})
@@ -84,13 +110,13 @@ func (h *Handler) Simpan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tipe := domain.TipePeriode(r.FormValue("tipe"))
-	mulai, e := time.Parse("2006-01-02", r.FormValue("tanggal_mulai"))
+	mulai, e := time.ParseInLocation("2006-01-02", r.FormValue("tanggal_mulai"), time.Local)
 	if e != nil {
 		http.Error(w, "Tanggal mulai tidak valid", http.StatusBadRequest)
 		return
 	}
 	if _, e = h.service.BuatPeriode(r.Context(), tipe, mulai); e != nil {
-		galatAksi(w, e, "Gagal membuat periode")
+		galatAksi(w, r, e, "Gagal membuat periode")
 		return
 	}
 	http.Redirect(w, r, "/periode", http.StatusSeeOther)
@@ -109,24 +135,38 @@ func (h *Handler) Hitung(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Tutup(w http.ResponseWriter, r *http.Request) {
 	id, e := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if e != nil {
+	if e != nil || id <= 0 {
 		http.Error(w, "ID periode tidak valid", http.StatusBadRequest)
 		return
 	}
 	p, e := h.service.AmbilPeriode(r.Context(), id)
 	if e != nil {
-		galatServer(w, e, "Gagal mengambil periode")
+		galatServer(w, r, e, "Gagal mengambil periode")
 		return
 	}
 	ring, e := h.service.RingkasanTutupPeriode(r.Context(), id)
 	if e != nil {
-		galatServer(w, e, "Gagal mengambil ringkasan")
+		galatServer(w, r, e, "Gagal mengambil ringkasan")
 		return
+	}
+	bisa := p.Status == domain.PeriodeDihitung
+	alasan := ""
+	if bisa {
+		prevOK, err := h.service.PeriodeSebelumnyaDitutup(r.Context(), p)
+		if err != nil {
+			galatServer(w, r, err, "Gagal memeriksa periode sebelumnya")
+			return
+		}
+		if !prevOK {
+			bisa = false
+			alasan = "Periode sebelumnya dengan tipe yang sama harus ditutup terlebih dahulu."
+		}
 	}
 	h.renderer.Render(w, r, "periode_tutup.html", web.Data{
 		Judul: "Tutup Periode",
 		Aktif: "periode",
-		Isi:   tutupPage{Periode: p, Ringkasan: ring, BisaDitutup: p.Status == domain.PeriodeDihitung},
+		Galat: alasan,
+		Isi:   tutupPage{Periode: p, Ringkasan: ring, BisaDitutup: bisa, Alasan: alasan},
 	})
 }
 
@@ -136,12 +176,12 @@ func (h *Handler) SimpanTutup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, e := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if e != nil {
+	if e != nil || id <= 0 {
 		http.Error(w, "ID periode tidak valid", http.StatusBadRequest)
 		return
 	}
 	if e = h.service.TutupPeriode(r.Context(), id); e != nil {
-		galatAksi(w, e, "Gagal menutup periode")
+		galatAksi(w, r, e, "Gagal menutup periode")
 		return
 	}
 	http.Redirect(w, r, "/periode", http.StatusSeeOther)
@@ -150,17 +190,17 @@ func (h *Handler) SimpanTutup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DaftarKoreksi(w http.ResponseWriter, r *http.Request) {
 	ks, e := h.service.DaftarKoreksi(r.Context(), nil)
 	if e != nil {
-		galatServer(w, e, "Gagal mengambil koreksi")
+		galatServer(w, r, e, "Gagal mengambil koreksi")
 		return
 	}
 	ps, e := h.service.DaftarPeriode(r.Context())
 	if e != nil {
-		galatServer(w, e, "Gagal mengambil periode")
+		galatServer(w, r, e, "Gagal mengambil periode")
 		return
 	}
 	pekerja, e := h.service.DaftarPekerjaKoreksi(r.Context())
 	if e != nil {
-		galatServer(w, e, "Gagal mengambil pekerja")
+		galatServer(w, r, e, "Gagal mengambil pekerja")
 		return
 	}
 	h.renderer.Render(w, r, "koreksi.html", web.Data{
@@ -199,7 +239,7 @@ func (h *Handler) SimpanKoreksi(w http.ResponseWriter, r *http.Request) {
 		Keterangan:    r.FormValue("keterangan"),
 	})
 	if e != nil {
-		galatAksi(w, e, "Gagal menyimpan koreksi")
+		galatAksi(w, r, e, "Gagal menyimpan koreksi")
 		return
 	}
 	http.Redirect(w, r, "/koreksi", http.StatusSeeOther)

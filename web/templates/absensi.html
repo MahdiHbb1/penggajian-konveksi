@@ -48,6 +48,7 @@
           <td data-lembur>—</td>
           <td>
             <form id="{{$formID}}" method="post" action="/absensi">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <input type="hidden" name="tanggal" value="{{$.Isi.Tanggal}}">
               <input type="hidden" name="jadwal_shift_id" value="{{.Jadwal.ID}}">
               {{if .AdaAbsensi}}

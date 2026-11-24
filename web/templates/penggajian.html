@@ -48,6 +48,7 @@
 
   <div class="aksi">
     <form method="post" action="/penggajian">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <input type="hidden" name="periode_id" value="{{.Isi.PeriodeID}}">
       <button class="btn" type="submit">Hitung gaji</button>
     </form>

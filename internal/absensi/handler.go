@@ -2,7 +2,7 @@
 package absensi
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -133,9 +133,10 @@ func (h *Handler) Simpan(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) BelumLengkap(w http.ResponseWriter, r *http.Request) {
 	periode, err := h.service.DaftarPeriode(r.Context())
 	if err != nil {
+		log.Printf("absensi handler: daftar periode: %v", err)
 		h.renderer.Render(w, r, "absensi_belum_lengkap.html", web.Data{
 			Judul: "Absensi Belum Lengkap", Aktif: "absensi",
-			Galat: "Gagal mengambil daftar periode: " + err.Error(),
+			Galat: "Gagal mengambil daftar periode. Silakan coba lagi.",
 			Isi:   halamanBelumLengkap{},
 		})
 		return
@@ -155,8 +156,9 @@ func (h *Handler) BelumLengkap(w http.ResponseWriter, r *http.Request) {
 		view.PeriodeID = id
 		view.Absensi, err = h.service.DaftarAbsensiBelumLengkap(r.Context(), id)
 		if err != nil {
+			log.Printf("absensi handler: daftar belum lengkap periode=%d: %v", id, err)
 			h.renderer.Render(w, r, "absensi_belum_lengkap.html", web.Data{
-				Judul: "Absensi Belum Lengkap", Aktif: "absensi", Galat: "Gagal mengambil absensi: " + err.Error(),
+				Judul: "Absensi Belum Lengkap", Aktif: "absensi", Galat: "Gagal mengambil data absensi. Silakan coba lagi.",
 				Isi: view,
 			})
 			return
@@ -175,7 +177,8 @@ type jamInput struct {
 func (h *Handler) renderAbsensi(w http.ResponseWriter, r *http.Request, tanggal time.Time, info, galat string, override map[int64]jamInput) {
 	daftar, err := h.service.DaftarJadwalAbsensi(r.Context(), tanggal)
 	if err != nil {
-		galat = "Gagal mengambil jadwal absensi: " + err.Error()
+		log.Printf("absensi handler: daftar jadwal tanggal=%s: %v", tanggal.Format("2006-01-02"), err)
+		galat = "Gagal mengambil jadwal absensi. Silakan coba lagi."
 		daftar = nil
 	}
 
@@ -253,6 +256,7 @@ func pesanKesalahanAbsensi(err error) string {
 	case ErrTanggalTidakSesuai:
 		return "Tanggal jam masuk harus sesuai dengan tanggal jadwal."
 	default:
-		return fmt.Sprintf("Absensi gagal disimpan: %v", err)
+		log.Printf("absensi handler: gagal simpan: %v", err)
+		return "Absensi gagal disimpan karena gangguan server. Silakan coba lagi."
 	}
 }

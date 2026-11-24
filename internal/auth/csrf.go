@@ -1,89 +1,85 @@
 // Pemilik: Fadli | Modul 6 | Aturan: 12, 13
-// csrf.go menyediakan proteksi CSRF sederhana berbasis token sinkronisasi.
-// Token dibuat saat login, disimpan di store in-memory, dan diverifikasi
-// di setiap POST yang mengubah data.
+// csrf.go menyediakan proteksi CSRF tanpa map global tak terbatas:
+//   - Halaman pra-login (/login): Double-Submit Cookie (cookie HttpOnly dicocokkan dengan form).
+//   - Halaman terautentikasi (semua POST): token CSRF terikat sesi (Synchronizer Token di entriSesi).
 package auth
 
 import (
-	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
-	"sync"
 	"time"
 )
 
 const (
 	namaCookieCSRF = "csrf_token"
 	namaFieldCSRF  = "csrf_token"
-	durasiCSRF     = 8 * time.Hour
+	durasiCSRF     = 2 * time.Hour
+	panjangHexCSRF = 64 // 32 byte acak dalam hex
 )
 
-var (
-	muCSRF    sync.RWMutex
-	storeCSRF = make(map[string]time.Time) // token → kedaluwarsa
-)
+func tokenHexValid(token string) bool {
+	if len(token) != panjangHexCSRF {
+		return false
+	}
+	_, err := hex.DecodeString(token)
+	return err == nil
+}
 
-// buatTokenCSRF menghasilkan token CSRF baru, menyimpannya di store,
-// dan menyetel cookie CSRF (tidak HttpOnly agar JS bisa membacanya jika perlu).
+// cocokTokenCSRF membandingkan dua token secara constant-time dan menolak token kosong.
+func cocokTokenCSRF(diharapkan, diterima string) bool {
+	if diharapkan == "" || diterima == "" || len(diharapkan) != len(diterima) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(diharapkan), []byte(diterima)) == 1
+}
+
+// buatTokenCSRF menghasilkan token CSRF baru dan menyetel cookie Double-Submit (HttpOnly).
 func buatTokenCSRF(w http.ResponseWriter) string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	token, err := buatTokenAcakHex()
+	if err != nil {
 		return ""
 	}
-	token := hex.EncodeToString(b)
-
-	muCSRF.Lock()
-	storeCSRF[token] = time.Now().Add(durasiCSRF)
-	muCSRF.Unlock()
-
 	http.SetCookie(w, &http.Cookie{
 		Name:     namaCookieCSRF,
 		Value:    token,
-		HttpOnly: false, // harus bisa dibaca form
+		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   secureCookie,
+		Secure:   isSecureCookie(),
 		Path:     "/",
 		MaxAge:   int(durasiCSRF.Seconds()),
 	})
 	return token
 }
 
-// ambilTokenCSRF mengambil token dari cookie CSRF request (untuk embed ke form).
-// Jika tidak ada, buat yang baru.
+// ambilTokenCSRF mengambil token dari cookie CSRF pra-login yang valid; membuat baru bila belum ada.
 func ambilTokenCSRF(w http.ResponseWriter, r *http.Request) string {
-	if cookie, err := r.Cookie(namaCookieCSRF); err == nil {
-		muCSRF.RLock()
-		exp, ada := storeCSRF[cookie.Value]
-		muCSRF.RUnlock()
-		if ada && time.Now().Before(exp) {
-			return cookie.Value
-		}
+	if cookie, err := r.Cookie(namaCookieCSRF); err == nil && tokenHexValid(cookie.Value) {
+		return cookie.Value
 	}
 	return buatTokenCSRF(w)
 }
 
-// periksaCSRF memvalidasi token CSRF dari form POST.
-// Mengembalikan true jika token valid.
-func periksaCSRF(r *http.Request) bool {
-	formToken := r.FormValue(namaFieldCSRF)
-	if formToken == "" {
-		return false
-	}
-	muCSRF.RLock()
-	exp, ada := storeCSRF[formToken]
-	muCSRF.RUnlock()
-	return ada && time.Now().Before(exp)
+// hapusCookieCSRF menghapus cookie CSRF pra-login setelah login berhasil.
+func hapusCookieCSRF(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     namaCookieCSRF,
+		Value:    "",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureCookie(),
+		Path:     "/",
+		MaxAge:   -1,
+	})
 }
 
-// hapusTokenCSRFKedaluwarsa menghapus token yang sudah kedaluwarsa.
-// Dipanggil oleh MulaiCleanupSesi secara periodik.
-func hapusTokenCSRFKedaluwarsa() {
-	sekarang := time.Now()
-	muCSRF.Lock()
-	for token, exp := range storeCSRF {
-		if sekarang.After(exp) {
-			delete(storeCSRF, token)
-		}
+// periksaCSRF memvalidasi token CSRF pada form pra-login dengan pola Double-Submit Cookie
+// (cookie csrf_token pada request wajib cocok constant-time dengan field form csrf_token).
+func periksaCSRF(r *http.Request) bool {
+	cookie, err := r.Cookie(namaCookieCSRF)
+	if err != nil || !tokenHexValid(cookie.Value) {
+		return false
 	}
-	muCSRF.Unlock()
+	formToken := r.PostFormValue(namaFieldCSRF)
+	return cocokTokenCSRF(cookie.Value, formToken)
 }

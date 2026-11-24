@@ -15,8 +15,9 @@ type MiddlewarePeranFunc func(peran ...domain.Peran) func(http.Handler) http.Han
 
 // IsiSlip adalah data yang dikirim ke template slip.html.
 type IsiSlip struct {
-	Slip    domain.SlipGaji
-	Rincian []domain.SlipGajiDetail
+	Slip       domain.SlipGaji
+	Rincian    []domain.SlipGajiDetail
+	SisaKasbon domain.Rupiah
 }
 
 // IsiRekap adalah data yang dikirim ke template rekap.html.
@@ -72,54 +73,60 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Slip menampilkan slip beserta rincian penggajian.
+// Slip menampilkan slip beserta rincian penggajian dan sisa kasbon pekerja.
 func (h *Handler) Slip(w http.ResponseWriter, r *http.Request) {
 	periodeID, err := strconv.ParseInt(r.PathValue("periodeID"), 10, 64)
 	if err != nil || periodeID <= 0 {
-		h.tampilkanGalatSlip(w, r, "ID periode tidak valid.")
+		h.tampilkanGalatSlip(w, r, "ID periode tidak valid.", http.StatusBadRequest)
 		return
 	}
 
 	pekerjaID, err := strconv.ParseInt(r.PathValue("pekerjaID"), 10, 64)
 	if err != nil || pekerjaID <= 0 {
-		h.tampilkanGalatSlip(w, r, "ID pekerja tidak valid.")
+		h.tampilkanGalatSlip(w, r, "ID pekerja tidak valid.", http.StatusBadRequest)
 		return
 	}
 
 	slip, err := h.service.AmbilSlipGaji(r.Context(), periodeID, pekerjaID)
 	if err != nil {
 		log.Printf("slip handler: ambil slip periode=%d pekerja=%d: %v", periodeID, pekerjaID, err)
-		h.tampilkanGalatSlip(w, r, "Slip tidak ditemukan atau periode belum siap.")
+		h.tampilkanGalatSlip(w, r, "Slip tidak ditemukan atau periode belum siap.", http.StatusNotFound)
 		return
 	}
 
 	rincian, err := h.service.DaftarRincianSlip(r.Context(), slip.ID)
 	if err != nil {
 		log.Printf("slip handler: rincian slip=%d: %v", slip.ID, err)
-		h.tampilkanGalatSlip(w, r, "Gagal mengambil rincian slip. Silakan coba lagi.")
+		h.tampilkanGalatSlip(w, r, "Gagal mengambil rincian slip. Silakan coba lagi.", http.StatusInternalServerError)
 		return
+	}
+
+	sisaKasbon, err := h.service.SisaKasbonPekerja(r.Context(), pekerjaID)
+	if err != nil {
+		log.Printf("slip handler: sisa kasbon pekerja=%d: %v", pekerjaID, err)
 	}
 
 	h.renderer.Render(w, r, "slip.html", web.Data{
 		Judul: "Slip Gaji",
 		Aktif: "slip",
 		Isi: IsiSlip{
-			Slip:    slip,
-			Rincian: rincian,
+			Slip:       slip,
+			Rincian:    rincian,
+			SisaKasbon: sisaKasbon,
 		},
 	})
 }
 
-func (h *Handler) tampilkanGalatSlip(w http.ResponseWriter, r *http.Request, pesan string) {
+func (h *Handler) tampilkanGalatSlip(w http.ResponseWriter, r *http.Request, pesan string, status int) {
 	h.renderer.Render(w, r, "slip.html", web.Data{
-		Judul: "Slip Gaji",
-		Aktif: "slip",
-		Galat: pesan,
+		Judul:  "Slip Gaji",
+		Aktif:  "slip",
+		Galat:  pesan,
+		Status: status,
 	})
 }
 
 // RekapPilihPeriode menampilkan halaman rekap dengan pemilih periode.
-// Digunakan ketika pengguna mengakses /rekap tanpa ID periode.
 func (h *Handler) RekapPilihPeriode(w http.ResponseWriter, r *http.Request) {
 	periodes, err := h.service.DaftarPeriodeTersedia(r.Context())
 	if err != nil {
@@ -132,47 +139,32 @@ func (h *Handler) RekapPilihPeriode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Rekap menampilkan rekap gaji per periode.
+// Rekap menampilkan rekap gaji per periode dari snapshot slip yang konsisten.
 func (h *Handler) Rekap(w http.ResponseWriter, r *http.Request) {
 	periodeID, err := strconv.ParseInt(r.PathValue("periodeID"), 10, 64)
 	if err != nil || periodeID <= 0 {
-		// Redirect ke pemilih periode.
 		http.Redirect(w, r, "/rekap", http.StatusSeeOther)
 		return
 	}
 
-	// Ambil daftar periode untuk dropdown pemilih.
 	periodes, err := h.service.DaftarPeriodeTersedia(r.Context())
 	if err != nil {
 		log.Printf("rekap handler: daftar periode: %v", err)
 	}
 
-	rekap, err := h.service.RekapGajiPerPeriode(r.Context(), periodeID)
+	rekap, slips, err := h.service.RekapDanDaftarSlip(r.Context(), periodeID)
 	if err != nil {
 		log.Printf("rekap handler: rekap periode=%d: %v", periodeID, err)
 		h.renderer.Render(w, r, "rekap.html", web.Data{
 			Judul: "Rekap Gaji",
 			Aktif: "rekap",
 			Galat: "Gagal mengambil data rekap. Pastikan periode sudah dihitung atau ditutup.",
-			Isi:   IsiRekap{PeriodeID: periodeID, DaftarPeriode: periodes},
-		})
-		return
-	}
-
-	slips, err := h.service.DaftarSlipPeriode(r.Context(), periodeID)
-	if err != nil {
-		log.Printf("rekap handler: daftar slip periode=%d: %v", periodeID, err)
-		h.renderer.Render(w, r, "rekap.html", web.Data{
-			Judul: "Rekap Gaji",
-			Aktif: "rekap",
-			Galat: "Gagal mengambil daftar slip. Silakan coba lagi.",
-			Isi:   IsiRekap{PeriodeID: periodeID, Rekap: rekap, DaftarPeriode: periodes},
+			Isi:   IsiRekap{PeriodeID: 0, DaftarPeriode: periodes},
 		})
 		return
 	}
 
 	var harian, bulanan []domain.SlipGaji
-
 	for _, slip := range slips {
 		if slip.Pekerja != nil && slip.Pekerja.Jenis == domain.PekerjaHarian {
 			harian = append(harian, slip)

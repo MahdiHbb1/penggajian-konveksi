@@ -123,9 +123,14 @@ func (h *Handler) susunHalaman(r *http.Request, mulai time.Time) (halamanJadwal,
 		peta[kunciSel(c.PekerjaID, c.Tanggal)] = c
 	}
 
-	var kunciTanggal [6]bool
-	for i := range kunciTanggal {
-		kunciTanggal[i], err = h.service.Terkunci(ctx, mulai.AddDate(0, 0, i))
+	var kunciHarian, kunciBulanan [6]bool
+	for i := 0; i < 6; i++ {
+		tgl := mulai.AddDate(0, 0, i)
+		kunciHarian[i], err = h.service.TerkunciJenis(ctx, domain.PekerjaHarian, tgl)
+		if err != nil {
+			return hal, err
+		}
+		kunciBulanan[i], err = h.service.TerkunciJenis(ctx, domain.PekerjaBulanan, tgl)
 		if err != nil {
 			return hal, err
 		}
@@ -133,9 +138,13 @@ func (h *Handler) susunHalaman(r *http.Request, mulai time.Time) (halamanJadwal,
 
 	for _, p := range pekerja {
 		baris := barisView{Pekerja: p}
+		kunci := kunciHarian
+		if p.Jenis == domain.PekerjaBulanan {
+			kunci = kunciBulanan
+		}
 		for i := 0; i < 6; i++ {
 			tgl := mulai.AddDate(0, 0, i)
-			v := selView{Nama: namaField(p.ID, tgl), Terkunci: kunciTanggal[i]}
+			v := selView{Nama: namaField(p.ID, tgl), Terkunci: kunci[i]}
 			if c, ada := peta[kunciSel(p.ID, tgl)]; ada {
 				v.ShiftID = c.ShiftID
 				if c.PunyaAbsensi {
@@ -198,6 +207,33 @@ func (h *Handler) Simpan(w http.ResponseWriter, r *http.Request) {
 		ada[kunciSel(c.PekerjaID, c.Tanggal)] = c
 	}
 
+	daftarShift, err := h.service.DaftarShift(ctx)
+	if err != nil {
+		log.Printf("jadwal: daftar shift: %v", err)
+		h.tampilkan(w, r, mulai, galatServer, "")
+		return
+	}
+	shiftValid := make(map[int64]bool, len(daftarShift))
+	for _, s := range daftarShift {
+		shiftValid[s.ID] = true
+	}
+	var kunciHarian, kunciBulanan [6]bool
+	for i := 0; i < 6; i++ {
+		tgl := mulai.AddDate(0, 0, i)
+		kunciHarian[i], err = h.service.TerkunciJenis(ctx, domain.PekerjaHarian, tgl)
+		if err != nil {
+			log.Printf("jadwal: cek kunci harian: %v", err)
+			h.tampilkan(w, r, mulai, galatServer, "")
+			return
+		}
+		kunciBulanan[i], err = h.service.TerkunciJenis(ctx, domain.PekerjaBulanan, tgl)
+		if err != nil {
+			log.Printf("jadwal: cek kunci bulanan: %v", err)
+			h.tampilkan(w, r, mulai, galatServer, "")
+			return
+		}
+	}
+
 	disimpan := 0
 	var galat []string
 	catatGalat := func(p domain.Pekerja, tgl time.Time, err error) {
@@ -210,6 +246,10 @@ func (h *Handler) Simpan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, p := range pekerja {
+		kunci := kunciHarian
+		if p.Jenis == domain.PekerjaBulanan {
+			kunci = kunciBulanan
+		}
 		for i := 0; i < 6; i++ {
 			tgl := mulai.AddDate(0, 0, i)
 			nilai, dikirim := r.PostForm[namaField(p.ID, tgl)]
@@ -229,7 +269,7 @@ func (h *Handler) Simpan(w http.ResponseWriter, r *http.Request) {
 				}
 			default:
 				shiftID, err := strconv.ParseInt(v, 10, 64)
-				if err != nil {
+				if err != nil || !shiftValid[shiftID] {
 					catatGalat(p, tgl, ErrShiftTidakValid)
 					continue
 				}
@@ -239,7 +279,11 @@ func (h *Handler) Simpan(w http.ResponseWriter, r *http.Request) {
 					}
 					err = h.service.UbahJadwal(ctx, domain.JadwalShift{ID: cur.ID, ShiftID: shiftID})
 				} else {
-					_, err = h.service.BuatJadwal(ctx, domain.JadwalShift{PekerjaID: p.ID, ShiftID: shiftID, Tanggal: tgl})
+					if kunci[i] {
+						catatGalat(p, tgl, ErrPeriodeTertutup)
+						continue
+					}
+					_, err = h.service.BuatJadwalTervalidasi(ctx, domain.JadwalShift{PekerjaID: p.ID, ShiftID: shiftID, Tanggal: tgl})
 				}
 				if err != nil {
 					catatGalat(p, tgl, err)
