@@ -2,8 +2,10 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"sync"
 	"time"
 
@@ -12,6 +14,9 @@ import (
 
 // durasisesi adalah masa berlaku sesi login.
 const durasisesi = 8 * time.Hour
+
+// intervalBersihSesi adalah seberapa sering goroutine pembersih berjalan.
+const intervalBersihSesi = 30 * time.Minute
 
 // entriSesi menyimpan data pengguna dan waktu kedaluwarsa.
 type entriSesi struct {
@@ -61,4 +66,39 @@ func HapusSesi(id string) {
 	muSesi.Lock()
 	delete(storeSesi, id)
 	muSesi.Unlock()
+}
+
+// bersihkanSesiKedaluwarsa menghapus semua entri sesi yang sudah kedaluwarsa.
+// Dipanggil secara periodik oleh MulaiCleanupSesi.
+func bersihkanSesiKedaluwarsa() {
+	sekarang := time.Now()
+	muSesi.Lock()
+	for id, entri := range storeSesi {
+		if sekarang.After(entri.kedaluwarsa) {
+			delete(storeSesi, id)
+		}
+	}
+	muSesi.Unlock()
+}
+
+// MulaiCleanupSesi memulai goroutine yang membersihkan sesi kedaluwarsa secara periodik.
+// Goroutine berhenti ketika ctx dibatalkan (saat server shutdown).
+// Panggil dari main() setelah server siap.
+func MulaiCleanupSesi(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(intervalBersihSesi)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				bersihkanSesiKedaluwarsa()
+				hapusTokenCSRFKedaluwarsa()
+				bersihkanRateLimitKedaluwarsa()
+				log.Printf("cleanup: sesi, csrf, dan rate limit dibersihkan")
+			case <-ctx.Done():
+				log.Printf("cleanup sesi: goroutine berhenti")
+				return
+			}
+		}
+	}()
 }

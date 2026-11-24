@@ -2,6 +2,24 @@
 <!-- Pemilik: Fadli | Modul 6 -->
 {{with .Isi}}
 {{$isi := .}}
+
+{{if $isi.DaftarPeriode}}
+<section class="panel">
+  <h2>Pilih Periode</h2>
+  <form method="get" class="form-inline">
+    <select name="periode" onchange="if(this.value) window.location='/rekap/'+this.value">
+      <option value="">-- Pilih periode --</option>
+      {{range $isi.DaftarPeriode}}
+      <option value="{{.ID}}" {{if eq .ID $isi.PeriodeID}}selected{{end}}>
+        {{.Tipe}} | {{.TanggalMulai.Format "02 Jan 2006"}} – {{.TanggalSelesai.Format "02 Jan 2006"}} ({{.Status}})
+      </option>
+      {{end}}
+    </select>
+  </form>
+</section>
+{{end}}
+
+{{if gt $isi.PeriodeID 0}}
 <section class="card-grid" aria-label="Ringkasan rekap">
   <article class="card"><h2>Biaya gaji bruto</h2><p class="angka">Rp {{$isi.Rekap.TotalBruto}}</p></article>
   <article class="card"><h2>Total lembur</h2><p class="angka">Rp {{$isi.Rekap.TotalLembur}}</p></article>
@@ -59,10 +77,19 @@
   </div>
   {{if $.Pemilik}}<p class="ket">Tampilan Pemilik hanya baca.</p>{{end}}
 </section>
+
+{{else}}
+{{if not $isi.DaftarPeriode}}
+<section class="panel">
+  <p class="kosong">Belum ada periode yang berstatus Dihitung atau Ditutup.</p>
+</section>
 {{else}}
 <section class="panel">
-  <p class="kosong">Pilih periode dari menu navigasi untuk menampilkan rekap.</p>
+  <p class="kosong">Pilih periode dari dropdown di atas untuk menampilkan rekap.</p>
 </section>
+{{end}}
+{{end}}
+
 {{end}}
 
 <p class="owner">Pemilik: Fadli | Modul 6</p>

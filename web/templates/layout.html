@@ -24,15 +24,16 @@
         <a href="/penggajian" {{if eq .Aktif "penggajian"}}class="aktif"{{end}}>Penggajian</a>
         <a href="/periode" {{if eq .Aktif "periode"}}class="aktif"{{end}}>Periode</a>
         <a href="/koreksi" {{if eq .Aktif "koreksi"}}class="aktif"{{end}}>Koreksi</a>
-        <a href="/rekap/0" {{if eq .Aktif "rekap"}}class="aktif"{{end}}>Rekap</a>
+        <a href="/rekap" {{if eq .Aktif "rekap"}}class="aktif"{{end}}>Rekap</a>
       {{end}}
       {{if .Pemilik}}
-        <a href="/rekap/0" {{if eq .Aktif "rekap"}}class="aktif"{{end}}>Rekap</a>
+        <a href="/rekap" {{if eq .Aktif "rekap"}}class="aktif"{{end}}>Rekap</a>
       {{end}}
     </nav>
     <div class="user-box">
       {{with .Pengguna}}<span>{{.Username}} | {{.NamaPeran}}</span>{{end}}
       <form method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button class="btn btn-kecil" type="submit">Keluar</button>
       </form>
     </div>

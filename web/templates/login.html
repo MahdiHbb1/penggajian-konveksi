@@ -6,6 +6,7 @@
   {{if .Galat}}<div class="alert alert-error" role="alert">{{.Galat}}</div>{{end}}
   {{if .Info}}<div class="alert alert-info" role="status">{{.Info}}</div>{{end}}
   <form method="post" action="/login">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>Username
       <input type="text" name="username" autocomplete="username" required autofocus>
     </label>

@@ -3,6 +3,7 @@ package auth
 
 import (
 	"net/http"
+	"strings"
 
 	"penggajian-konveksi/internal/domain"
 	"penggajian-konveksi/internal/web"
@@ -10,17 +11,19 @@ import (
 
 const namaCookie = "sesi_penggajian"
 
-// halamanPublik adalah rute yang tidak memerlukan login.
-var halamanPublik = map[string]bool{
-	"/login": true,
+// adalahRutePublik menentukan apakah path tidak memerlukan login.
+// /login dan semua path di bawah /static/ bisa diakses tanpa sesi.
+func adalahRutePublik(path string) bool {
+	return path == "/login" || strings.HasPrefix(path, "/static/")
 }
 
 // MiddlewareAuth memasang pengguna pada context request.
-// Semua halaman kecuali /login memerlukan sesi sah.
+// Semua halaman kecuali /login dan /static/ memerlukan sesi sah.
 // Bila tidak ada sesi, redirect ke /login.
+// Halaman yang memerlukan login akan mendapatkan CSRF token untuk form POST.
 func MiddlewareAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if halamanPublik[r.URL.Path] {
+		if adalahRutePublik(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -35,19 +38,17 @@ func MiddlewareAuth(next http.Handler) http.Handler {
 		pengguna := AmbilSesi(cookie.Value)
 		if pengguna == nil {
 			// Hapus cookie kedaluwarsa.
-			http.SetCookie(w, &http.Cookie{
-				Name:     namaCookie,
-				Value:    "",
-				MaxAge:   -1,
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-				Path:     "/",
-			})
+			http.SetCookie(w, buatCookieSesi("", -1))
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(web.DenganPengguna(r.Context(), pengguna)))
+		// Siapkan CSRF token untuk halaman yang sudah login.
+		token := ambilTokenCSRF(w, r)
+		ctx := web.DenganPengguna(r.Context(), pengguna)
+		ctx = web.DenganCSRFToken(ctx, token)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

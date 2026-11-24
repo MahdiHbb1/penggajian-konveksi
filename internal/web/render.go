@@ -14,15 +14,16 @@ import (
 
 // Data adalah data minimum yang diterima setiap template.
 type Data struct {
-	Judul    string
-	Aktif    string
-	Pengguna *domain.Pengguna
-	Admin    bool
-	Pemilik  bool
-	Polos    bool
-	Galat    string
-	Info     string
-	Isi      any
+	Judul     string
+	Aktif     string
+	Pengguna  *domain.Pengguna
+	Admin     bool
+	Pemilik   bool
+	Polos     bool
+	Galat     string
+	Info      string
+	Isi       any
+	CSRFToken string
 }
 
 // Renderer dipakai handler untuk merender satu template halaman.
@@ -48,6 +49,10 @@ func (v *Render) Render(w http.ResponseWriter, r *http.Request, namaTemplate str
 		data.Admin = data.Pengguna.Role == domain.PeranAdmin
 		data.Pemilik = data.Pengguna.Role == domain.PeranPemilik
 	}
+	// Ambil CSRF token dari context jika belum di-set oleh handler.
+	if data.CSRFToken == "" {
+		data.CSRFToken = CSRFTokenDariContext(r.Context())
+	}
 
 	layout := filepath.Join(v.Dir, "layout.html")
 	halaman := filepath.Join(v.Dir, namaTemplate)
@@ -72,6 +77,8 @@ func (v *Render) Render(w http.ResponseWriter, r *http.Request, namaTemplate str
 
 type kunciPengguna struct{}
 
+type kunciCSRFToken struct{}
+
 // DenganPengguna menyimpan pengguna pada context request.
 func DenganPengguna(ctx context.Context, pengguna *domain.Pengguna) context.Context {
 	return context.WithValue(ctx, kunciPengguna{}, pengguna)
@@ -81,4 +88,15 @@ func DenganPengguna(ctx context.Context, pengguna *domain.Pengguna) context.Cont
 func PenggunaDariContext(ctx context.Context) *domain.Pengguna {
 	pengguna, _ := ctx.Value(kunciPengguna{}).(*domain.Pengguna)
 	return pengguna
+}
+
+// DenganCSRFToken menyimpan CSRF token pada context request.
+func DenganCSRFToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, kunciCSRFToken{}, token)
+}
+
+// CSRFTokenDariContext mengambil CSRF token dari context request.
+func CSRFTokenDariContext(ctx context.Context) string {
+	token, _ := ctx.Value(kunciCSRFToken{}).(string)
+	return token
 }

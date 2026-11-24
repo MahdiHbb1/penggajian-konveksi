@@ -3,20 +3,20 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha512"
-	"crypto/subtle"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"penggajian-konveksi/internal/domain"
 )
 
 // ErrCredentialSalah dikembalikan bila username atau password tidak cocok.
 var ErrCredentialSalah = errors.New("username atau password salah")
+
+// biayaBcrypt adalah cost factor bcrypt yang digunakan untuk hashing password.
+const biayaBcrypt = 12
 
 // Service menangani login, logout, dan sesi.
 type Service struct {
@@ -28,40 +28,15 @@ func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
 }
 
-// hashPassword menghasilkan hash SHA-512 dengan salt untuk password.
-// Format simpanan: "sha512:{salt}:{hash}".
-// Fungsi ini dipakai saat menyimpan password baru ke database.
-func hashPassword(password, salt string) string {
-	h := sha512.New()
-	h.Write([]byte(salt + password))
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-// periksaPassword memverifikasi password teks biasa terhadap hash tersimpan.
-// Format hash: "sha512:{salt}:{hash}".
-func periksaPassword(passwordTertulis, hashTersimpan string) bool {
-	bagian := strings.SplitN(hashTersimpan, ":", 3)
-	if len(bagian) != 3 || bagian[0] != "sha512" {
-		return false
+// HashPasswordBaru menghasilkan hash bcrypt dari password teks biasa.
+// Gunakan fungsi ini untuk menyimpan password baru ke database.
+// Jangan pernah menyimpan atau mencatat password teks biasa.
+func HashPasswordBaru(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), biayaBcrypt)
+	if err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
 	}
-	salt := bagian[1]
-	hashExpected := bagian[2]
-	hashActual := hashPassword(passwordTertulis, salt)
-	// subtle.ConstantTimeCompare untuk menghindari timing attack.
-	return subtle.ConstantTimeCompare([]byte(hashActual), []byte(hashExpected)) == 1
-}
-
-// HashPasswordBaru menghasilkan hash password dengan salt acak.
-func HashPasswordBaru(password string) string {
-	saltBytes := make([]byte, 8)
-
-	if _, err := rand.Read(saltBytes); err != nil {
-		panic(fmt.Errorf("gagal membuat salt: %w", err))
-	}
-
-	salt := hex.EncodeToString(saltBytes)
-
-	return fmt.Sprintf("sha512:%s:%s", salt, hashPassword(password, salt))
+	return string(hash), nil
 }
 
 // Login memeriksa username dan password.
@@ -70,7 +45,7 @@ func HashPasswordBaru(password string) string {
 // Hasil: Pengguna yang cocok.
 // Aturan: hanya pengguna berperan Admin atau Pemilik.
 // Tabel: pengguna.
-// Memanggil: database/sql QueryRowContext.
+// Memanggil: database/sql QueryRowContext, bcrypt.CompareHashAndPassword.
 func (s *Service) Login(ctx context.Context, username, password string) (domain.Pengguna, error) {
 	if s.db == nil {
 		return domain.Pengguna{}, ErrCredentialSalah
@@ -86,7 +61,7 @@ func (s *Service) Login(ctx context.Context, username, password string) (domain.
 	if err != nil {
 		return domain.Pengguna{}, fmt.Errorf("query pengguna: %w", err)
 	}
-	if !periksaPassword(password, p.PasswordHash) {
+	if err := bcrypt.CompareHashAndPassword([]byte(p.PasswordHash), []byte(password)); err != nil {
 		return domain.Pengguna{}, ErrCredentialSalah
 	}
 	// Jangan kembalikan hash ke pemanggil.
