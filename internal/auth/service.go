@@ -4,9 +4,19 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"penggajian-konveksi/internal/domain"
 )
+
+// ErrCredentialSalah dikembalikan bila username atau password tidak cocok.
+var ErrCredentialSalah = errors.New("username atau password salah")
+
+// biayaBcrypt adalah cost factor bcrypt yang digunakan untuk hashing password.
+const biayaBcrypt = 12
 
 // Service menangani login, logout, dan sesi.
 type Service struct {
@@ -18,6 +28,17 @@ func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
 }
 
+// HashPasswordBaru menghasilkan hash bcrypt dari password teks biasa.
+// Gunakan fungsi ini untuk menyimpan password baru ke database.
+// Jangan pernah menyimpan atau mencatat password teks biasa.
+func HashPasswordBaru(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), biayaBcrypt)
+	if err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+	return string(hash), nil
+}
+
 // Login memeriksa username dan password.
 //
 // Masukan: context, username, password teks biasa.
@@ -25,26 +46,35 @@ func NewService(db *sql.DB) *Service {
 // Aturan: hanya pengguna berperan Admin atau Pemilik.
 // Tabel: pengguna.
 // Memanggil: database/sql QueryRowContext, bcrypt.CompareHashAndPassword.
-//
-// TODO(Fadli):
-//  1. Ambil pengguna berdasarkan username.
-//  2. Bandingkan password dengan hash bcrypt.
-//  3. Jangan pernah menyimpan atau mencatat password teks biasa.
 func (s *Service) Login(ctx context.Context, username, password string) (domain.Pengguna, error) {
-	return domain.Pengguna{}, domain.ErrBelumDiimplementasi
+	if s.db == nil {
+		return domain.Pengguna{}, ErrCredentialSalah
+	}
+	var p domain.Pengguna
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, username, password_hash, role FROM pengguna WHERE username = ? LIMIT 1`,
+		username,
+	).Scan(&p.ID, &p.Username, &p.PasswordHash, &p.Role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Pengguna{}, ErrCredentialSalah
+	}
+	if err != nil {
+		return domain.Pengguna{}, fmt.Errorf("query pengguna: %w", err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(p.PasswordHash), []byte(password)); err != nil {
+		return domain.Pengguna{}, ErrCredentialSalah
+	}
+	// Jangan kembalikan hash ke pemanggil.
+	p.PasswordHash = ""
+	return p, nil
 }
 
-// Logout menghapus sesi pengguna.
+// Logout menghapus sesi pengguna dari store sesi global.
 //
 // Masukan: context dan ID sesi.
 // Hasil: error.
 // Aturan: sesi memakai cookie HttpOnly.
-// Tabel: tidak ada (sesi disimpan di cookie atau store sesi).
-// Memanggil: penyimpanan sesi yang dipilih.
-//
-// TODO(Fadli):
-//  1. Hapus sesi aktif.
-//  2. Kosongkan cookie HttpOnly.
 func (s *Service) Logout(ctx context.Context, sessionID string) error {
-	return domain.ErrBelumDiimplementasi
+	HapusSesi(sessionID)
+	return nil
 }

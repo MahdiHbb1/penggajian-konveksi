@@ -1,24 +1,23 @@
 # Sistem Penggajian Konveksi Mitra Jaya
 
-Kerangka proyek akhir mata kuliah Pemrograman Web. Aplikasi Go ini menyiapkan struktur enam modul, 17 halaman, 12 tabel, dan kontrak antarmodul. Badan fungsi bisnis masih placeholder dan akan diisi oleh pemilik modul masing-masing.
+Proyek akhir mata kuliah Pemrograman Web. Aplikasi Go dengan enam modul, 17 halaman, 12 tabel, dan kontrak antarmodul.
 
 ## Stack
 
 - Go 1.22 atau lebih baru
-- MySQL 8 (opsional saat pengembangan kerangka)
+- MySQL 8
 - `html/template` dan CSS sederhana
 - Tanpa framework frontend
 
-## Menjalankan tanpa MySQL
-
-Kerangka harus bisa diperiksa tanpa database.
+## Menjalankan
 
 ```bash
 cp .env.example .env
+# Sesuaikan DB_DSN di .env
 go run ./cmd/server
 ```
 
-Buka `http://localhost:8080`. Aplikasi akan mencatat peringatan bila MySQL tidak tersedia, tetapi tetap berjalan. Semua halaman memakai data kosong.
+Buka `http://localhost:8080`.
 
 ## Menyiapkan MySQL
 
@@ -27,14 +26,26 @@ mysql -u root -p < database/schema.sql
 mysql -u root -p < database/seed.sql
 ```
 
-`seed.sql` hanya berisi dua shift: Pagi 07.00-15.00 dan Siang 15.00-23.00. Tidak ada akun contoh.
+`seed.sql` berisi dua shift: Pagi 07.00-15.00 dan Siang 15.00-23.00.
 
-Setelah Modul 6 mengimplementasikan autentikasi, buat akun admin dengan hash bcrypt. Jangan menulis password asli di repo, README, atau seed. Contoh bentuk data:
+## Membuat Akun Pengguna
+
+Autentikasi menggunakan bcrypt (cost 12). Untuk membuat akun:
+
+1. Buat hash bcrypt dari password lokal:
+
+```bash
+go run internal/auth/genhash/main.go <password-anda>
+```
+
+2. Masukkan akun ke database:
 
 ```sql
 INSERT INTO pengguna (username, password_hash, role)
-VALUES ('admin', '<hash-bcrypt-dari-password-lokal>', 'ADMIN');
+VALUES ('admin', '<hash-bcrypt-dari-langkah-1>', 'ADMIN');
 ```
+
+Jangan menyimpan password asli di source code, seed, atau README.
 
 ## Konfigurasi
 
@@ -45,6 +56,15 @@ VALUES ('admin', '<hash-bcrypt-dari-password-lokal>', 'ADMIN');
 | `SESSION_SECRET` | kosong | Diisi lokal, jangan di-commit |
 | `TEMPLATE_DIR` | `web/templates` | Folder template |
 | `STATIC_DIR` | `web/static` | Folder aset statis |
+| `SECURE_COOKIE` | `false` | Set `true` untuk production/HTTPS |
+
+## Autentikasi dan Keamanan
+
+- Password di-hash dengan **bcrypt cost 12** (`golang.org/x/crypto/bcrypt`).
+- Session cookie: `HttpOnly`, `SameSite=Lax`, `Secure` (jika `SECURE_COOKIE=true`).
+- Middleware `MiddlewareAuth` melindungi seluruh halaman kecuali `/login` dan `/static/`.
+- Middleware `MiddlewarePeran` membatasi akses berdasarkan peran (Admin/Pemilik).
+- `/static/` dapat diakses tanpa login.
 
 ## Struktur
 
@@ -88,12 +108,6 @@ go build ./...
 go vet ./...
 go test ./...
 ```
-
-Tes kerangka memakai `t.Skip` karena fungsi belum diisi. Nilai harapan tes sudah ditulis dan mengacu pada contoh A/B/C di dokumen rancangan.
-
-## Mode kerangka dan autentikasi
-
-`MiddlewareAuth` pada versi kerangka meloloskan semua request dengan pengguna palsu berperan Admin. Ini hanya agar 17 halaman bisa diperiksa. Bypass ini wajib diganti Modul 6 sebelum aplikasi dipakai. Jangan mengklaim login sudah berjalan.
 
 ## Alur kerja kelompok
 

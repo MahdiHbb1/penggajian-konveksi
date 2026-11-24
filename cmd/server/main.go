@@ -2,10 +2,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/joho/godotenv"
 	"penggajian-konveksi/internal/absensi"
 	"penggajian-konveksi/internal/auth"
 	"penggajian-konveksi/internal/config"
@@ -20,6 +22,9 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Peringatan: file .env tidak ditemukan: %v", err)
+	}
 	cfg := config.Muat()
 
 	db, err := database.Buka(cfg.DSN)
@@ -63,7 +68,11 @@ func main() {
 		func(mux *http.ServeMux, r web.Renderer) { absensi.DaftarkanRute(mux, r, svcAbsensi) },
 		func(mux *http.ServeMux, r web.Renderer) { penggajian.DaftarkanRute(mux, r, svcPenggajian) },
 		func(mux *http.ServeMux, r web.Renderer) { periode.DaftarkanRute(mux, r, svcPeriode) },
-		func(mux *http.ServeMux, r web.Renderer) { laporan.DaftarkanRute(mux, r, svcLaporan) },
+		// Laporan (Modul 6): dashboard, slip, dan rekap hanya untuk Admin dan Pemilik.
+		// MiddlewarePeran dipasang setelah MiddlewareAuth (yang membungkus seluruh handler).
+		func(mux *http.ServeMux, r web.Renderer) {
+			laporan.DaftarkanRute(mux, r, svcLaporan, auth.MiddlewarePeran)
+		},
 		func(mux *http.ServeMux, r web.Renderer) { auth.DaftarkanRute(mux, r, svcAuth) },
 	)
 
@@ -76,8 +85,13 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Printf("Kerangka Sistem Penggajian berjalan di http://localhost:%s", cfg.Port)
-	log.Printf("Mode kerangka: autentikasi masih placeholder, MySQL tidak wajib menyala.")
+	// Mulai goroutine pembersihan sesi, token CSRF, dan rate limit.
+	// Context dibatalkan saat server mati (pemakaian sederhana tanpa graceful shutdown).
+	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
+	defer cancelCleanup()
+	auth.MulaiCleanupSesi(cleanupCtx)
+
+	log.Printf("Sistem Penggajian berjalan di http://localhost:%s", cfg.Port)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server berhenti: %v", err)
 	}

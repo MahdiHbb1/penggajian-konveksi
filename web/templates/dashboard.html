@@ -1,25 +1,30 @@
 {{define "konten"}}
 <!-- Pemilik: Fadli | Modul 6 -->
-<!-- TODO(Fadli): ganti angka kartu, pintasan, dan tabel periode dengan data dari service. -->
+{{$d := .Isi}}
 <section class="card-grid" aria-label="Ringkasan">
   <article class="card">
     <h2>Periode berjalan</h2>
+    {{if $d.Ringkasan.PeriodeBerjalan}}
+    <p class="angka">{{$d.Ringkasan.PeriodeBerjalan.Tipe}}</p>
+    <p class="ket">{{$d.Ringkasan.PeriodeBerjalan.TanggalMulai.Format "02 Jan 2006"}} – {{$d.Ringkasan.PeriodeBerjalan.TanggalSelesai.Format "02 Jan 2006"}}</p>
+    {{else}}
     <p class="angka">-</p>
-    <p class="ket">Status periode terbaru</p>
+    <p class="ket">Tidak ada periode terbuka</p>
+    {{end}}
   </article>
   <article class="card">
     <h2>Absensi belum lengkap</h2>
-    <p class="angka">0</p>
-    <p class="ket"><a href="/absensi/belum-lengkap">Periksa absensi</a></p>
+    <p class="angka">{{$d.Ringkasan.AbsensiBelumLengkap}}</p>
+    <p class="ket">Belum ada jam keluar</p>
   </article>
   <article class="card">
     <h2>Gaji dibayar terakhir</h2>
-    <p class="angka">Rp 0</p>
+    <p class="angka">Rp {{$d.Ringkasan.GajiBersihTerakhir}}</p>
     <p class="ket">Periode terakhir yang ditutup</p>
   </article>
   <article class="card">
     <h2>Total sisa kasbon</h2>
-    <p class="angka">Rp 0</p>
+    <p class="angka">Rp {{$d.Ringkasan.TotalSisaKasbon}}</p>
     <p class="ket">Seluruh kasbon berjalan</p>
   </article>
 </section>
@@ -41,10 +46,26 @@
   <div class="tabel-wrap">
     <table>
       <thead>
-        <tr><th>Tipe</th><th>Mulai</th><th>Selesai</th><th>Status</th></tr>
+        <tr><th>Tipe</th><th>Mulai</th><th>Selesai</th><th>Status</th><th>Aksi</th></tr>
       </thead>
       <tbody>
-        <tr><td class="kosong" colspan="4">Belum ada data.</td></tr>
+        {{range $d.Ringkasan.DaftarPeriode}}
+        <tr>
+          <td>{{.Tipe}}</td>
+          <td>{{.TanggalMulai.Format "02 Jan 2006"}}</td>
+          <td>{{.TanggalSelesai.Format "02 Jan 2006"}}</td>
+          <td>{{.Status}}</td>
+          <td>
+            {{if or (eq (printf "%s" .Status) "DIHITUNG") (eq (printf "%s" .Status) "DITUTUP")}}
+            <a href="/rekap/{{.ID}}">Rekap</a>
+            {{else}}
+            -
+            {{end}}
+          </td>
+        </tr>
+        {{else}}
+        <tr><td class="kosong" colspan="5">Belum ada data.</td></tr>
+        {{end}}
       </tbody>
     </table>
   </div>
