@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"penggajian-konveksi/internal/domain"
@@ -28,11 +29,12 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// HasilHitung adalah satu slip beserta rincian dan potongan kasbonnya.
+// HasilHitung adalah satu slip beserta rincian, potongan kasbon, dan ID koreksi yang masuk hitungan.
 type HasilHitung struct {
-	Slip     domain.SlipGaji
-	Rincian  []domain.SlipGajiDetail
-	Potongan []domain.PotonganKasbon
+	Slip       domain.SlipGaji
+	Rincian    []domain.SlipGajiDetail
+	Potongan   []domain.PotonganKasbon
+	KoreksiIDs []int64
 }
 
 // RincianHarian adalah rincian slip dengan data absensi untuk halaman rincian.
@@ -66,14 +68,11 @@ func (r *Repository) SimpanSlipDanRincian(ctx context.Context, slip domain.SlipG
 	return tx.Commit()
 }
 
-// SimpanHasilPeriode menimpa seluruh slip satu periode dalam satu transaksi.
-// Dipakai saat hitung dan hitung ulang agar hasil periode selalu konsisten.
-//
-// Masukan: context, ID periode, daftar hasil hitung.
-// Hasil: error.
-// Aturan: 13, 18.
-// Tabel: slip_gaji, slip_gaji_detail, potongan_kasbon.
-// Memanggil: database/sql BeginTx, ExecContext.
+// SimpanHasilPeriode mengunci baris periode_gaji (FOR UPDATE), menimpa seluruh slip,
+// menyinkronkan koreksi_gaji tepat untuk ID yang terhitung, dan memperbarui status
+// periode menjadi DIHITUNG dalam satu transaksi atomik.
+// Penguncian periode_gaji di awal mencegah InnoDB deadlock saat hitung paralel dan
+// mencegah penimpaan periode yang baru saja ditutup (DITUTUP).
 func (r *Repository) SimpanHasilPeriode(ctx context.Context, periodeID int64, hasil []HasilHitung) error {
 	if r.db == nil {
 		return errDatabaseTidakSiap
@@ -83,6 +82,20 @@ func (r *Repository) SimpanHasilPeriode(ctx context.Context, periodeID int64, ha
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Kunci baris periode terlebih dahulu untuk menyeragamkan urutan lock dengan TutupPeriode.
+	var statusSaatIni string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT status FROM periode_gaji WHERE id = ? FOR UPDATE`, periodeID,
+	).Scan(&statusSaatIni); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ErrTidakDitemukan
+		}
+		return err
+	}
+	if domain.StatusPeriode(statusSaatIni) == domain.PeriodeDitutup {
+		return ErrPeriodeTertutup
+	}
 
 	// Hapus anak lebih dulu karena foreign key memakai RESTRICT.
 	if _, err := tx.ExecContext(ctx, `
@@ -102,15 +115,124 @@ func (r *Repository) SimpanHasilPeriode(ctx context.Context, periodeID int64, ha
 		return err
 	}
 
+	koreksiSet := make(map[int64]struct{})
+	var koreksiIDs []int64
 	for i := range hasil {
 		slip := hasil[i].Slip
 		slip.PeriodeID = periodeID
-		if err := simpanSatuSlip(ctx, tx, &slip, hasil[i].Rincian, hasil[i].Potongan); err != nil {
+		if err := simpanSatuSlipBaru(ctx, tx, &slip, hasil[i].Rincian, hasil[i].Potongan); err != nil {
 			return err
 		}
 		hasil[i].Slip.ID = slip.ID
+		for _, kid := range hasil[i].KoreksiIDs {
+			if kid <= 0 {
+				continue
+			}
+			if _, ada := koreksiSet[kid]; !ada {
+				koreksiSet[kid] = struct{}{}
+				koreksiIDs = append(koreksiIDs, kid)
+			}
+		}
+	}
+
+	// Lepas koreksi yang sebelumnya menempel pada periode ini lalu ikat tepat ID yang masuk hitungan.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE koreksi_gaji SET periode_terapan_id = NULL WHERE periode_terapan_id = ?`, periodeID); err != nil {
+		return err
+	}
+	if len(koreksiIDs) > 0 {
+		placeholders := strings.Repeat("?,", len(koreksiIDs))
+		placeholders = placeholders[:len(placeholders)-1]
+		args := make([]any, 0, len(koreksiIDs)+2)
+		args = append(args, periodeID)
+		for _, kid := range koreksiIDs {
+			args = append(args, kid)
+		}
+		args = append(args, periodeID)
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE koreksi_gaji SET periode_terapan_id = ? WHERE id IN (`+placeholders+`) AND periode_terapan_id IS NULL AND periode_asal_id <> ?`,
+			args...); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE periode_gaji SET status = ? WHERE id = ? AND status <> ?`,
+		string(domain.PeriodeDihitung), periodeID, string(domain.PeriodeDitutup)); err != nil {
+		return err
 	}
 	return tx.Commit()
+}
+
+// simpanSatuSlipBaru menyisipkan satu slip beserta batch insert rincian dan potongan kasbonnya.
+func simpanSatuSlipBaru(ctx context.Context, tx *sql.Tx, slip *domain.SlipGaji, rincian []domain.SlipGajiDetail, potongan []domain.PotonganKasbon) error {
+	if slip.DibuatPada.IsZero() {
+		slip.DibuatPada = time.Now()
+	}
+	hasil, err := tx.ExecContext(ctx, `
+		INSERT INTO slip_gaji (
+			periode_id, pekerja_id, upah_pokok, total_lembur, potongan_telat,
+			total_koreksi, gaji_bruto, potongan_kasbon, gaji_bersih,
+			hari_kerja_dibayar, hari_kerja_periode, dibuat_pada)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		slip.PeriodeID, slip.PekerjaID, int64(slip.UpahPokok), int64(slip.TotalLembur),
+		int64(slip.PotonganTelat), int64(slip.TotalKoreksi), int64(slip.GajiBruto),
+		int64(slip.PotonganKasbon), int64(slip.GajiBersih), slip.HariKerjaDibayar,
+		nullableInt(slip.HariKerjaPeriode), slip.DibuatPada)
+	if err != nil {
+		return err
+	}
+	id, err := hasil.LastInsertId()
+	if err != nil {
+		return err
+	}
+	slip.ID = id
+	return sisipRincianDanPotonganBatch(ctx, tx, slip.ID, rincian, potongan)
+}
+
+func sisipRincianDanPotonganBatch(ctx context.Context, tx *sql.Tx, slipID int64, rincian []domain.SlipGajiDetail, potongan []domain.PotonganKasbon) error {
+	if len(rincian) > 0 {
+		var sb strings.Builder
+		sb.WriteString(`INSERT INTO slip_gaji_detail (slip_id, absensi_id, tanggal, upah_pokok_hari, upah_per_jam, menit_telat, potongan_telat, menit_lembur, upah_lembur) VALUES `)
+		args := make([]any, 0, len(rincian)*9)
+		for i, d := range rincian {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteString("(?,?,?,?,?,?,?,?,?)")
+			args = append(args,
+				slipID, d.AbsensiID, formatTanggal(d.Tanggal), int64(d.UpahPokokHari),
+				int64(d.UpahPerJam), d.MenitTelat, int64(d.PotonganTelat),
+				d.MenitLembur, int64(d.UpahLembur),
+			)
+		}
+		if _, err := tx.ExecContext(ctx, sb.String(), args...); err != nil {
+			return err
+		}
+	}
+
+	validPotongan := make([]domain.PotonganKasbon, 0, len(potongan))
+	for _, p := range potongan {
+		if p.Jumlah > 0 {
+			validPotongan = append(validPotongan, p)
+		}
+	}
+	if len(validPotongan) > 0 {
+		var sb strings.Builder
+		sb.WriteString(`INSERT INTO potongan_kasbon (slip_id, kasbon_id, jumlah) VALUES `)
+		args := make([]any, 0, len(validPotongan)*3)
+		for i, p := range validPotongan {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteString("(?,?,?)")
+			args = append(args, slipID, p.KasbonID, int64(p.Jumlah))
+		}
+		if _, err := tx.ExecContext(ctx, sb.String(), args...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func simpanSatuSlip(ctx context.Context, tx *sql.Tx, slip *domain.SlipGaji, rincian []domain.SlipGajiDetail, potongan []domain.PotonganKasbon) error {
@@ -489,6 +611,7 @@ func (r *Repository) AbsensiPeriode(ctx context.Context, periodeID int64) ([]dom
 		JOIN pekerja p ON p.id = j.pekerja_id
 		JOIN periode_gaji pg ON pg.id = ?
 		WHERE j.tanggal BETWEEN pg.tanggal_mulai AND pg.tanggal_selesai
+		  AND p.jenis = CASE WHEN pg.tipe = 'MINGGUAN' THEN 'HARIAN' ELSE 'BULANAN' END
 		ORDER BY j.tanggal, p.nama, p.kode`, periodeID)
 	if err != nil {
 		return nil, err
@@ -527,7 +650,7 @@ func (r *Repository) AbsensiPeriode(ctx context.Context, periodeID int64) ([]dom
 	return hasil, rows.Err()
 }
 
-// AbsensiBelumLengkap menghitung absensi tanpa jam keluar pada periode.
+// AbsensiBelumLengkap menghitung absensi tanpa jam keluar pada periode yang sesuai jenis pekerja tipe periode.
 func (r *Repository) AbsensiBelumLengkap(ctx context.Context, periodeID int64) (int, error) {
 	if r.db == nil {
 		return 0, errDatabaseTidakSiap
@@ -537,8 +660,10 @@ func (r *Repository) AbsensiBelumLengkap(ctx context.Context, periodeID int64) (
 		SELECT COUNT(*)
 		FROM absensi a
 		JOIN jadwal_shift j ON j.id = a.jadwal_shift_id
+		JOIN pekerja p ON p.id = j.pekerja_id
 		JOIN periode_gaji pg ON pg.id = ?
 		WHERE j.tanggal BETWEEN pg.tanggal_mulai AND pg.tanggal_selesai
+		  AND p.jenis = CASE WHEN pg.tipe = 'MINGGUAN' THEN 'HARIAN' ELSE 'BULANAN' END
 		  AND a.jam_keluar IS NULL`, periodeID).Scan(&jumlah)
 	return jumlah, err
 }

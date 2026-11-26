@@ -247,18 +247,30 @@ func (r *Repository) RiwayatPotongan(ctx context.Context, kasbonID int64) ([]Pot
 }
 
 // PekerjaAktif memeriksa apakah pekerja ada dan berstatus aktif.
-//
-// Masukan: context dan ID pekerja.
-// Hasil: true bila aktif.
-// Aturan: 16.
-// Tabel: pekerja.
-// Memanggil: database/sql QueryRowContext.
 func (r *Repository) PekerjaAktif(ctx context.Context, pekerjaID int64) (bool, error) {
-	var ada bool
+	aktif, _, err := r.PekerjaAktifDanJenis(ctx, pekerjaID)
+	return aktif, err
+}
+
+// PekerjaAktifDanJenis mengambil status aktif dan jenis pekerja dalam satu query.
+func (r *Repository) PekerjaAktifDanJenis(ctx context.Context, pekerjaID int64) (bool, domain.JenisPekerja, error) {
+	if r == nil || r.db == nil {
+		return false, "", errors.New("database kasbon belum tersedia")
+	}
+	var (
+		aktif bool
+		jenis string
+	)
 	err := r.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM pekerja WHERE id = ? AND aktif = TRUE)`, pekerjaID,
-	).Scan(&ada)
-	return ada, err
+		`SELECT aktif, jenis FROM pekerja WHERE id = ?`, pekerjaID,
+	).Scan(&aktif, &jenis)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, "", nil
+	}
+	if err != nil {
+		return false, "", err
+	}
+	return aktif, domain.JenisPekerja(jenis), nil
 }
 
 // DaftarPekerja mengambil pekerja untuk pilihan dropdown.
@@ -295,14 +307,10 @@ func (r *Repository) DaftarPekerja(ctx context.Context, hanyaAktif bool) ([]doma
 }
 
 // TanggalTerkunci memeriksa langsung apakah tanggal ada di periode DITUTUP.
-// Dipakai sebagai cadangan selama PeriodeProvider Modul 5 belum jadi.
-//
-// Masukan: context dan tanggal.
-// Hasil: true bila terkunci.
-// Aturan: 14.
-// Tabel: periode_gaji.
-// Memanggil: database/sql QueryRowContext.
 func (r *Repository) TanggalTerkunci(ctx context.Context, tanggal time.Time) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("database kasbon belum tersedia")
+	}
 	var terkunci bool
 	err := r.db.QueryRowContext(ctx,
 		`SELECT EXISTS(
@@ -310,6 +318,28 @@ func (r *Repository) TanggalTerkunci(ctx context.Context, tanggal time.Time) (bo
 		   WHERE status = 'DITUTUP' AND ? BETWEEN tanggal_mulai AND tanggal_selesai
 		 )`,
 		tanggal.Format(formatTanggalSQL),
+	).Scan(&terkunci)
+	return terkunci, err
+}
+
+// TanggalTerkunciJenis memeriksa apakah tanggal ada di periode DITUTUP sesuai jenis pekerja.
+func (r *Repository) TanggalTerkunciJenis(ctx context.Context, jenis domain.JenisPekerja, tanggal time.Time) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("database kasbon belum tersedia")
+	}
+	tipe := domain.PeriodeMingguan
+	if jenis == domain.PekerjaBulanan {
+		tipe = domain.PeriodeBulanan
+	}
+	var terkunci bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(
+		   SELECT 1 FROM periode_gaji
+		   WHERE status = 'DITUTUP'
+		     AND tipe = ?
+		     AND ? BETWEEN tanggal_mulai AND tanggal_selesai
+		 )`,
+		tipe, tanggal.Format(formatTanggalSQL),
 	).Scan(&terkunci)
 	return terkunci, err
 }

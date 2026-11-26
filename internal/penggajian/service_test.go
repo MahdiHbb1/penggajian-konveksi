@@ -48,9 +48,13 @@ func (f *fakeRepo) SimpanSlipDanRincian(_ context.Context, slip domain.SlipGaji,
 }
 
 func (f *fakeRepo) SimpanHasilPeriode(_ context.Context, periodeID int64, hasil []HasilHitung) error {
+	if f.periode.Status == domain.PeriodeDitutup {
+		return ErrPeriodeTertutup
+	}
 	f.slips = make(map[int64]domain.SlipGaji)
 	f.rincian = make(map[int64][]RincianHarian)
 	f.hasilHitung = hasil
+	terikat := make(map[int64]bool)
 	for _, h := range hasil {
 		slip := h.Slip
 		slip.PeriodeID = periodeID
@@ -60,7 +64,29 @@ func (f *fakeRepo) SimpanHasilPeriode(_ context.Context, periodeID int64, hasil 
 			rincian = append(rincian, RincianHarian{SlipGajiDetail: d})
 		}
 		f.rincian[slip.PekerjaID] = rincian
+		for _, kid := range h.KoreksiIDs {
+			terikat[kid] = true
+		}
 	}
+	for pekerjaID, daftar := range f.koreksi {
+		var sisa []domain.KoreksiGaji
+		for _, k := range daftar {
+			if terikat[k.ID] {
+				id := periodeID
+				k.PeriodeTerapanID = &id
+				f.diterapkan[pekerjaID] = append(f.diterapkan[pekerjaID], k)
+			} else {
+				sisa = append(sisa, k)
+			}
+		}
+		if len(sisa) == 0 {
+			delete(f.koreksi, pekerjaID)
+		} else {
+			f.koreksi[pekerjaID] = sisa
+		}
+	}
+	f.status = domain.PeriodeDihitung
+	f.periode.Status = domain.PeriodeDihitung
 	return nil
 }
 

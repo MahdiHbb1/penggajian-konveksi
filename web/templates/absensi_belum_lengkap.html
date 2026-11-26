@@ -1,21 +1,26 @@
 {{define "konten"}}
-<!-- Pemilik: Zahra | Modul 3 -->
-<!-- TODO(Zahra): isi pilihan periode dan tabel dari Service.DaftarAbsensiBelumLengkap. -->
+<!-- Pemilik: Zahra | Modul 3 | Perlu review pemilik template: Fadli -->
 <section class="panel">
   <form class="form-grid" method="get" action="/absensi/belum-lengkap">
     <label>Periode
-      <select name="periode_id">
+      <select name="periode_id" required>
         <option value="">Pilih periode</option>
+        {{range .Isi.Periode}}
+        <option value="{{.ID}}" {{if eq .ID $.Isi.PeriodeID}}selected{{end}}>
+          {{.Tipe}} · {{.TanggalMulai.Format "02 Jan 2006"}} – {{.TanggalSelesai.Format "02 Jan 2006"}} ({{.Status}})
+        </option>
+        {{end}}
       </select>
     </label>
     <div class="aksi">
       <button class="btn" type="submit">Tampilkan</button>
+      <a class="btn btn-sekunder" href="/absensi">Kembali ke input absensi</a>
     </div>
   </form>
 </section>
 
 <div class="alert alert-info" role="status">
-  Absensi tanpa jam keluar menghalangi proses hitung gaji.
+  Absensi tanpa jam keluar menghalangi proses hitung gaji. Lengkapi jam keluar sebelum periode dihitung.
 </div>
 
 <section class="panel">
@@ -25,7 +30,21 @@
         <tr><th>Tanggal</th><th>Pekerja</th><th>Shift</th><th>Jam masuk</th><th>Aksi</th></tr>
       </thead>
       <tbody>
-        <tr><td class="kosong" colspan="5">Tidak ada absensi yang belum lengkap.</td></tr>
+        {{if not .Isi.PeriodeID}}
+        <tr><td class="kosong" colspan="5">Pilih periode untuk melihat absensi yang belum lengkap.</td></tr>
+        {{else}}
+          {{range .Isi.Absensi}}
+          <tr>
+            <td>{{.Jadwal.Tanggal.Format "02 Jan 2006"}}</td>
+            <td>{{.Pekerja.Nama}}</td>
+            <td>{{.Jadwal.Shift.Nama}}</td>
+            <td>{{.JamMasuk.Format "15:04"}}</td>
+            <td><a class="btn btn-kecil" href="/absensi?tanggal={{.Jadwal.Tanggal.Format "2006-01-02"}}">Lengkapi</a></td>
+          </tr>
+          {{else}}
+          <tr><td class="kosong" colspan="5">Tidak ada absensi yang belum lengkap pada periode ini.</td></tr>
+          {{end}}
+        {{end}}
       </tbody>
     </table>
   </div>

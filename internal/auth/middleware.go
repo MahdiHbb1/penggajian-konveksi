@@ -2,49 +2,100 @@
 package auth
 
 import (
+	"log"
 	"net/http"
+	"strings"
 
 	"penggajian-konveksi/internal/domain"
 	"penggajian-konveksi/internal/web"
 )
 
-// MiddlewareAuth memasang pengguna pada context request.
-//
-// Masukan: handler berikutnya.
-// Hasil: handler yang sudah membawa pengguna.
-// Aturan: semua halaman selain /login memerlukan sesi sah.
-// Tabel: pengguna (nanti).
-// Memanggil: web.DenganPengguna.
-//
-// TODO(Fadli): ganti dengan sesi bcrypt dan pengecekan peran.
-//
-// PERINGATAN: versi kerangka ini meloloskan semua request dengan pengguna
-// palsu berperan Admin supaya 17 halaman bisa diperiksa. Bypass ini hanya
-// untuk mode kerangka dan tidak boleh dipakai di aplikasi akhir.
+const namaCookie = "sesi_penggajian"
+
+// adalahRutePublik menentukan apakah path tidak memerlukan login.
+// /login dan semua path di bawah /static/ bisa diakses tanpa sesi.
+func adalahRutePublik(path string) bool {
+	return path == "/login" || strings.HasPrefix(path, "/static/")
+}
+
+func adalahMetodeMutasi(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func pasangHeaderKeamanan(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Referrer-Policy", "same-origin")
+}
+
+// MiddlewareAuth memasang pengguna & CSRF token terikat sesi pada context request,
+// menetapkan header keamanan dasar, serta memvalidasi CSRF untuk semua permintaan mutasi.
+// Semua halaman kecuali /login dan /static/ memerlukan sesi sah.
 func MiddlewareAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pengguna := &domain.Pengguna{
-			ID:       0,
-			Username: "kerangka",
-			Role:     domain.PeranAdmin,
+		pasangHeaderKeamanan(w)
+
+		if adalahRutePublik(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
 		}
-		next.ServeHTTP(w, r.WithContext(web.DenganPengguna(r.Context(), pengguna)))
+
+		// Ambil cookie sesi.
+		cookie, err := r.Cookie(namaCookie)
+		if err != nil {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		pengguna, csrfToken := ambilEntriSesi(cookie.Value)
+		if pengguna == nil {
+			// Hapus cookie kedaluwarsa.
+			http.SetCookie(w, buatCookieSesi("", -1))
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		// Validasi CSRF terpusat untuk semua request mutasi terautentikasi (fail-closed).
+		if adalahMetodeMutasi(r.Method) {
+			if err := r.ParseForm(); err != nil {
+				log.Printf("auth middleware: gagal membaca form %s %s dari %s: %v", r.Method, r.URL.Path, r.RemoteAddr, err)
+				http.Error(w, "Permintaan formulir tidak valid.", http.StatusForbidden)
+				return
+			}
+			if !cocokTokenCSRF(csrfToken, r.PostFormValue(namaFieldCSRF)) {
+				log.Printf("auth middleware: CSRF token tidak valid pada %s %s dari %s", r.Method, r.URL.Path, r.RemoteAddr)
+				http.Error(w, "Sesi formulir tidak valid. Silakan muat ulang halaman dan coba lagi.", http.StatusForbidden)
+				return
+			}
+		}
+
+		ctx := web.DenganPengguna(r.Context(), pengguna)
+		ctx = web.DenganCSRFToken(ctx, csrfToken)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 // MiddlewarePeran membatasi akses berdasarkan peran.
-//
-// Masukan: daftar peran yang diizinkan.
-// Hasil: middleware.
-// Aturan: Admin mengelola data, Pemilik hanya melihat.
-// Tabel: tidak ada.
-// Memanggil: web.PenggunaDariContext.
-//
-// TODO(Fadli): tolak request dengan pesan "Anda tidak memiliki akses ke halaman ini."
-// Versi kerangka saat ini meloloskan semua peran.
+// Bila pengguna tidak memiliki peran yang diizinkan, kembalikan 403.
 func MiddlewarePeran(peran ...domain.Peran) func(http.Handler) http.Handler {
+	diizinkan := make(map[domain.Peran]bool, len(peran))
+	for _, p := range peran {
+		diizinkan[p] = true
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pengguna := web.PenggunaDariContext(r.Context())
+			if pengguna == nil || !diizinkan[pengguna.Role] {
+				http.Error(w, "Anda tidak memiliki akses ke halaman ini.", http.StatusForbidden)
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
