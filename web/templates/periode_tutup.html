@@ -7,8 +7,8 @@
     <dt>Rentang</dt><dd>{{.Isi.Periode.TanggalMulai.Format "02-01-2006"}} – {{.Isi.Periode.TanggalSelesai.Format "02-01-2006"}}</dd>
     <dt>Status</dt><dd>{{.Isi.Periode.Status}}</dd>
     <dt>Jumlah slip</dt><dd>{{.Isi.Ringkasan.JumlahSlip}}</dd>
-    <dt>Total gaji bersih</dt><dd>Rp {{.Isi.Ringkasan.TotalBersih}}</dd>
-    <dt>Total potongan kasbon</dt><dd>Rp {{.Isi.Ringkasan.TotalPotonganKasbon}}</dd>
+    <dt>Total gaji bersih</dt><dd>{{rupiah .Isi.Ringkasan.TotalBersih}}</dd>
+    <dt>Total potongan kasbon</dt><dd>{{rupiah .Isi.Ringkasan.TotalPotonganKasbon}}</dd>
     <dt>Koreksi diterapkan</dt><dd>{{.Isi.Ringkasan.JumlahKoreksi}}</dd>
   </dl>
 </section>

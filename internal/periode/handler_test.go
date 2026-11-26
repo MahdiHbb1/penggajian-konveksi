@@ -110,7 +110,7 @@ func TestHalamanTutupPeriodeMenampilkanData(t *testing.T) {
 		t.Fatalf("status = %d, ingin 200; body: %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, ingin := range []string{"Ringkasan penutupan periode 1", "Rp 500000", "Koreksi diterapkan", "Saya sudah membayarkan gaji periode ini"} {
+	for _, ingin := range []string{"Ringkasan penutupan periode 1", "Rp 500.000", "Rp 100.000", "Koreksi diterapkan", "Saya sudah membayarkan gaji periode ini"} {
 		if !strings.Contains(body, ingin) {
 			t.Fatalf("halaman tidak memuat %q", ingin)
 		}
@@ -168,7 +168,7 @@ func TestHalamanKoreksiMenampilkanData(t *testing.T) {
 		t.Fatalf("status = %d, ingin 200; body: %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, ingin := range []string{"Koreksi upah", "Budi", "Koreksi baru", "Menunggu"} {
+	for _, ingin := range []string{"Koreksi upah", "-Rp 10.000", "Budi", "Koreksi baru", "Menunggu"} {
 		if !strings.Contains(body, ingin) {
 			t.Fatalf("halaman tidak memuat %q", ingin)
 		}
