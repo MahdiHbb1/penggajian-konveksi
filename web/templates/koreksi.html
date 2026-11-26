@@ -14,7 +14,7 @@
             <td>{{.DibuatPada.Format "02-01-2006"}}</td>
             <td>{{.PekerjaID}}</td>
             <td>{{.PeriodeAsalID}}</td>
-            <td>Rp {{.Jumlah}}</td>
+            <td>{{rupiah .Jumlah}}</td>
             <td>{{.Keterangan}}</td>
             <td>{{.Status}}</td>
             <td>{{if .PeriodeTerapanID}}{{.PeriodeTerapanID}}{{else}}—{{end}}</td>
